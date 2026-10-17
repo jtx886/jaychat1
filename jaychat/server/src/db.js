@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS messages (
   media_url TEXT DEFAULT '',
   media_thumb TEXT DEFAULT '',
   one_time INTEGER DEFAULT 0,
+  burn_sec INTEGER DEFAULT 5,
   recalled INTEGER DEFAULT 0,
   extra TEXT DEFAULT '',
   created_at INTEGER NOT NULL
@@ -172,6 +173,8 @@ function ensureColumn(table, column, ddl) {
 }
 // 腾讯云 IM 群 ID（自建群 ↔ 云群映射）
 ensureColumn('groups', 'im_groupid', "im_groupid TEXT DEFAULT ''");
+// 一次性消息：对方可查看的秒数（默认 5 秒）
+ensureColumn('messages', 'burn_sec', 'burn_sec INTEGER DEFAULT 5');
 
 const now = () => Date.now();
 

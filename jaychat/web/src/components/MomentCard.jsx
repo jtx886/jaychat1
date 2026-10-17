@@ -1,17 +1,28 @@
-import React from 'react';
-import { mediaUrl } from '../api.js';
-import { Avatar } from '../components/ui.jsx';
-import { Icon } from '../components/icons.jsx';
+import React, { useState } from 'react';
+import { api, mediaUrl } from '../api.js';
+import { Avatar, ActionSheet, toast } from '../components/ui.jsx';
+import { Icon, IconTile } from '../components/icons.jsx';
 import { fullTime } from '../lib/time.js';
 import { useApp } from '../App.jsx';
 
 /** 动态卡片：动态流 / 好友动态 / 个人动态共用 */
-export default function MomentCard({ moment, onOpen, onLike, showCommentPreview = true }) {
-  const { openUser } = useApp();
+export default function MomentCard({ moment, onOpen, onLike, showCommentPreview = true, onDeleted }) {
+  const { openUser, push } = useApp();
+  const [menuOpen, setMenuOpen] = useState(false);
   const m = moment;
   const media = (m.media || []).filter((x) => x.url);
   const nCls = media.length === 1 ? 'n1' : media.length === 2 || media.length === 4 ? 'n2' : 'n3';
   const visLabel = { public: '公开', friends: '好友可见', private: '私密', custom: '指定可见', exclude: '部分不可见' }[m.visibility];
+
+  const doDelete = async () => {
+    try {
+      await api.del(`/api/moments/${m.id}`);
+      toast('动态已删除');
+      onDeleted?.(m.id);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
 
   return (
     <div className="moment-card glass glass-strong">
@@ -26,6 +37,11 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           <div className="hint" style={{ marginTop: 2 }}>{fullTime(m.created_at)}</div>
         </div>
         {m.visibility !== 'public' ? <span className="badge-soft">{visLabel}</span> : null}
+        {m.is_mine ? (
+          <button className="icon-btn" aria-label="动态操作" onClick={() => setMenuOpen(true)}>
+            <Icon name="menu" size={17} strokeWidth={2} />
+          </button>
+        ) : null}
       </div>
 
       {m.text ? <div className="moment-text">{m.text}</div> : null}
@@ -35,12 +51,18 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           {media.slice(0, 9).map((item, i) => (
             <div key={i} onClick={() => onOpen?.('detail')} style={{ position: 'relative', cursor: 'pointer' }}>
               {item.type === 'video' ? (
-                <video src={mediaUrl(item.url)} muted playsInline preload="metadata" />
+                <video
+                  src={mediaUrl(item.url)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onClick={(e) => e.stopPropagation()}
+                />
               ) : (
                 <img src={mediaUrl(item.url)} alt="" loading="lazy" />
               )}
               {item.type === 'video' ? (
-                <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 8, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fff' }}>
+                <span style={{ position: 'absolute', left: 6, top: 6, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 8, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fff' }}>
                   <Icon name="play" size={11} filled /> 视频
                 </span>
               ) : null}
@@ -75,6 +97,25 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           ))}
         </div>
       ) : null}
+
+      <ActionSheet
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title="动态操作"
+        actions={[
+          {
+            icon: <IconTile name="lock" tone="violet" box={34} size={18} />,
+            label: '编辑可见范围',
+            onClick: () => push('momentVisibility', { momentId: m.id }),
+          },
+          {
+            icon: <IconTile name="trash" tone="rose" box={34} size={18} />,
+            label: '删除动态',
+            danger: true,
+            onClick: doDelete,
+          },
+        ]}
+      />
     </div>
   );
 }

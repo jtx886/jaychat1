@@ -3,14 +3,8 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Sheet, TopBar, toast, Spinner, MediaPicker } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
-
-const VIS_OPTIONS = [
-  { key: 'public', icon: 'globe', tone: 'sky', label: '公开', desc: '全站所有用户可见' },
-  { key: 'friends', icon: 'users', tone: 'mint', label: '好友可见', desc: '仅已添加的好友可见' },
-  { key: 'private', icon: 'lock', tone: 'slate', label: '私密', desc: '仅自己可见' },
-  { key: 'custom', icon: 'checkCircle', tone: 'brand', label: '指定好友可见', desc: '只让选中的好友看到' },
-  { key: 'exclude', icon: 'ban', tone: 'rose', label: '不给谁看', desc: '选中好友不可见' },
-];
+import { VIS_OPTIONS } from '../lib/momentVis.js';
+import { isVideoFile } from '../lib/media.js';
 
 export default function PostMomentScreen() {
   const { back, me } = useApp();
@@ -29,9 +23,11 @@ export default function PostMomentScreen() {
 
   const pick = async (files) => {
     try {
+      let count = media.length;
       for (const f of files) {
-        if (media.length >= 9) break;
-        const up = await api.upload(f, f.type?.startsWith('video') ? 'video' : 'image');
+        if (count >= 9) break;
+        const up = await api.upload(f, isVideoFile(f) ? 'video' : 'image');
+        count += 1;
         setMedia((list) => (list.length >= 9 ? list : [...list, { url: up.url, type: up.kind, localPreview: URL.createObjectURL(f) }]));
       }
     } catch (e) {

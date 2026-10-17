@@ -70,6 +70,26 @@ router.get('/:id', (req, res) => {
   res.json({ moment: shapeMoment(m, req.uid) });
 });
 
+// 修改动态可见范围
+router.patch('/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const m = db.prepare('SELECT * FROM moments WHERE id=? AND deleted=0').get(id);
+  if (!m) return res.status(404).json({ error: '动态不存在或已删除' });
+  if (m.author_id !== req.uid) return res.status(403).json({ error: '只能修改自己的动态' });
+  const { visibility, allowIds = [], denyIds = [] } = req.body || {};
+  if (!VISIBILITIES.includes(visibility)) return res.status(400).json({ error: '可见范围不合法' });
+  const allow = visibility === 'custom' ? allowIds.map(Number) : [];
+  const deny = visibility === 'exclude' ? denyIds.map(Number) : [];
+  if ((visibility === 'custom' || visibility === 'exclude') && !allow.length && !deny.length) {
+    return res.status(400).json({ error: '请选择好友' });
+  }
+  db.prepare('UPDATE moments SET visibility=?, allow_ids=?, deny_ids=? WHERE id=?')
+    .run(visibility, JSON.stringify(allow), JSON.stringify(deny), id);
+  const shaped = shapeMoment(db.prepare('SELECT * FROM moments WHERE id=?').get(id), req.uid);
+  sendToUsers([...new Set([req.uid, ...friendIds(req.uid)])], { type: 'moment:update', data: shaped });
+  res.json({ moment: shaped });
+});
+
 // 删除动态
 router.delete('/:id', (req, res) => {
   const id = Number(req.params.id);

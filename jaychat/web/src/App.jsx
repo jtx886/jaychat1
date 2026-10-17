@@ -16,6 +16,7 @@ import CreateGroupScreen from './screens/CreateGroup.jsx';
 import MomentsScreen from './screens/Moments.jsx';
 import MomentDetailScreen from './screens/MomentDetail.jsx';
 import PostMomentScreen from './screens/PostMoment.jsx';
+import MomentVisibilityScreen from './screens/MomentVisibility.jsx';
 import EditProfileScreen from './screens/EditProfile.jsx';
 import ServerSettingsScreen from './screens/ServerSettings.jsx';
 import UserMomentsScreen from './screens/UserMoments.jsx';
@@ -328,6 +329,8 @@ export default function App() {
         return <MomentDetailScreen {...r.params} />;
       case 'postMoment':
         return <PostMomentScreen {...r.params} />;
+      case 'momentVisibility':
+        return <MomentVisibilityScreen {...r.params} />;
       case 'editProfile':
         return <EditProfileScreen />;
       case 'serverSettings':

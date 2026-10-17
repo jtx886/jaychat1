@@ -7,6 +7,7 @@ import {
 import EmojiPanel, { StickerView } from '../components/EmojiPanel.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import { bubbleTime, fmtDuration, groupByInitial } from '../lib/time.js';
+import { isVideoFile } from '../lib/media.js';
 
 const RECALL_WINDOW = 3 * 60 * 1000;
 
@@ -29,6 +30,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [onlineSheet, setOnlineSheet] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [oneTime, setOneTime] = useState(false);
+  const [oneTimeSec, setOneTimeSec] = useState('5');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
   const convKey = `${convType}_${convId}`;
@@ -143,13 +145,15 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   const pickFiles = (files) => {
-    setPendingFiles(files.map((f) => ({ file: f, url: URL.createObjectURL(f), type: f.type?.startsWith('video') ? 'video' : 'image' })));
+    setPendingFiles(files.map((f) => ({ file: f, url: URL.createObjectURL(f), type: isVideoFile(f) ? 'video' : 'image' })));
     setOneTime(false);
+    setOneTimeSec('5');
     setPanel('confirm');
   };
 
   const doSendMedia = async () => {
     if (!pendingFiles.length) return;
+    const burnSec = Math.min(Math.max(Number(oneTimeSec) || 5, 1), 300);
     setSending(true);
     setPanel(null);
     try {
@@ -157,12 +161,12 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         const up = await api.upload(item.file, item.type);
         const d = await api.post('/api/messages', {
           convType, convId, msg_type: up.kind === 'video' ? 'video' : 'image',
-          media_url: up.url, media_thumb: '', one_time: oneTime,
+          media_url: up.url, media_thumb: '', one_time: oneTime, burn_sec: burnSec,
         });
         setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
       }
       setTimeout(scrollToBottom, 60);
-      toast(oneTime ? '一次性消息已发送（对方查看后自动销毁）' : '发送成功');
+      toast(oneTime ? `一次性消息已发送（对方查看后 ${burnSec} 秒自动销毁）` : '发送成功');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -317,7 +321,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                     style={{ position: 'relative', height: 150, width: 190, background: 'rgba(255,176,32,.08)' }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setViewer({ url: m.media_url, type: m.msg_type, messageId: m.id, oneTime: true });
+                      setViewer({ url: m.media_url, type: m.msg_type, messageId: m.id, oneTime: true, burnSec: m.burn_sec });
                     }}
                   >
                     <Icon name="flame" size={32} filled color="#ff9d2e" />
@@ -497,6 +501,38 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
           </div>
           <div className={'switch' + (oneTime ? ' on' : '')} onClick={() => setOneTime((v) => !v)}><i /></div>
         </div>
+        {oneTime ? (
+          <div className="glass pad mt">
+            <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="clock" size={15} strokeWidth={1.9} /> 对方可观看时长
+            </div>
+            <div className="hint">自定义对方查看该内容后自动销毁的秒数（1–300 秒）</div>
+            <div className="flex gap6 mt" style={{ flexWrap: 'wrap' }}>
+              {[3, 5, 10, 30, 60].map((sec) => (
+                <button
+                  key={sec}
+                  className={'chip' + (Number(oneTimeSec) === sec ? ' active' : '')}
+                  onClick={() => setOneTimeSec(String(sec))}
+                >
+                  {sec} 秒
+                </button>
+              ))}
+            </div>
+            <div className="glass pad mt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14 }}>自定义秒数</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={300}
+                value={oneTimeSec}
+                onChange={(e) => setOneTimeSec(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={() => setOneTimeSec(String(Math.min(Math.max(Number(oneTimeSec) || 5, 1), 300)))}
+                style={{ width: 96, textAlign: 'center' }}
+              />
+            </div>
+          </div>
+        ) : null}
         <button className="btn btn-primary btn-block mt" style={{ marginTop: 14 }} disabled={sending || !pendingFiles.length} onClick={doSendMedia}>
           {sending ? <Spinner size={18} /> : '发送'}
         </button>
@@ -579,6 +615,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         <MediaViewer
           item={{ url: viewer.url, type: viewer.type }}
           oneTimeView={!!viewer.oneTime}
+          burnSec={viewer.burnSec}
           onBurn={async () => {
             try {
               await api.post(`/api/messages/${viewer.messageId}/burn`, {});

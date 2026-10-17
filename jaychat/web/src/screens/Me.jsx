@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Sheet, ActionSheet, toast } from '../components/ui.jsx';
-import { Icon, IconTile } from '../components/icons.jsx';
+import { IconTile } from '../components/icons.jsx';
 import { maskEmail } from '../lib/time.js';
 import { ensureNotificationPermission } from '../lib/notify.js';
 
@@ -33,9 +33,6 @@ export default function MeScreen() {
           <div className="topbar-title">我的</div>
           <div className="topbar-sub">Jay Chat 个人中心</div>
         </div>
-        <button className="icon-btn" onClick={() => push('serverSettings')} aria-label="设置">
-          <Icon name="settings" size={19} strokeWidth={1.7} />
-        </button>
       </div>
 
       <div className="page-scroll with-nav">
@@ -137,14 +134,6 @@ export default function MeScreen() {
               <div className="list-main">
                 <div className="list-title">通知权限</div>
                 <div className="list-desc">开启后可接收消息与互动通知</div>
-              </div>
-              <span className="chev dim">›</span>
-            </div>
-            <div className="list-item" onClick={() => push('serverSettings')}>
-              <IconTile name="server" tone="slate" />
-              <div className="list-main">
-                <div className="list-title">服务器地址</div>
-                <div className="list-desc">跨网络聊天所用的服务端地址</div>
               </div>
               <span className="chev dim">›</span>
             </div>
