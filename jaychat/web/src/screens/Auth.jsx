@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, getBase } from '../api.js';
+import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { toast, Spinner, LogoMark } from '../components/ui.jsx';
 import { ensureNotificationPermission } from '../lib/notify.js';
@@ -7,7 +7,7 @@ import { ensureNotificationPermission } from '../lib/notify.js';
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@(qq\.com|163\.com)$/;
 
 export default function AuthScreen() {
-  const { login, push } = useApp();
+  const { login } = useApp();
   const [view, setView] = useState('login'); // login | register | forgot
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -196,12 +196,7 @@ export default function AuthScreen() {
           )}
         </div>
 
-        <div className="center mt" style={{ marginTop: 18 }}>
-          <span className="hint press-scale" style={{ cursor: 'pointer' }} onClick={() => push('serverSettings')}>
-            服务器地址：{getBase() || '当前同源'} · 点击设置
-          </span>
-        </div>
-        <div className="center hint" style={{ marginTop: 10 }}>
+        <div className="center hint" style={{ marginTop: 18 }}>
           官方账号：杰同学（官方群群主）
         </div>
       </div>

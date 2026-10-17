@@ -93,7 +93,7 @@ export default function MomentDetailScreen({ momentId }) {
     <div className="page" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <TopBar title="动态详情" sub={moment.author?.username} onBack={back} />
       <div className="page-scroll" style={{ flex: 1 }}>
-        <MomentCard moment={moment} onLike={like} onOpen={() => inputRef.current?.focus()} showCommentPreview={false} />
+        <MomentCard moment={moment} onLike={like} onOpen={() => inputRef.current?.focus()} showCommentPreview={false} onDeleted={back} />
 
         <div className="section-head">点赞（{moment.likes?.length || 0}）</div>
         <div className="glass mx" style={{ padding: 12 }}>

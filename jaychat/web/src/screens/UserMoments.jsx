@@ -91,7 +91,7 @@ export default function UserMomentsScreen({ userId, mine }) {
         ) : moments.length === 0 ? (
           <Empty icon="gallery" text={isSelf ? '你还没有发布动态' : 'TA 还没有发布动态'} />
         ) : (
-          moments.map((m) => <MomentCard key={m.id} moment={m} onLike={like} onOpen={() => push('momentDetail', { momentId: m.id })} />)
+          moments.map((m) => <MomentCard key={m.id} moment={m} onLike={like} onOpen={() => push('momentDetail', { momentId: m.id })} onDeleted={(id) => setMoments((l) => l.filter((x) => x.id !== id))} />)
         )}
         <div style={{ height: 20 }} />
       </div>

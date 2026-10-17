@@ -73,7 +73,7 @@ export default function MomentsScreen({ scope = 'all' }) {
         ) : moments.length === 0 ? (
           <Empty icon="globe" text={tab === 'friends' ? '好友们还没有发布动态' : '还没有人发布动态，快来第一个吧'} />
         ) : (
-          moments.map((m) => <MomentCard key={m.id} moment={m} onOpen={(k) => open(m, k)} onLike={like} />)
+          moments.map((m) => <MomentCard key={m.id} moment={m} onOpen={(k) => open(m, k)} onLike={like} onDeleted={(id) => setMoments((l) => l.filter((x) => x.id !== id))} />)
         )}
         <div style={{ height: 20 }} />
       </div>

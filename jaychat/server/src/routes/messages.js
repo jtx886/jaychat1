@@ -25,10 +25,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 60 * 1024 * 1024 } });
 
+const VIDEO_EXT = ['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv', '.3gp', '.flv', '.wmv', '.mpeg', '.mpg'];
+
 router.post('/upload', requireAuth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: '未收到文件' });
-  const kind = String(req.body?.kind || (req.file.mimetype.startsWith('video') ? 'video' : 'image'));
-  res.json({ url: `/uploads/${req.file.filename}`, thumb: '', kind, size: req.file.size, mime: req.file.mimetype });
+  // 以文件本身为准判断类型：客户端提示（kind）与 MIME 都可能缺失或错误
+  const ext = path.extname(req.file.originalname || '').toLowerCase();
+  const isVideo = req.file.mimetype.startsWith('video') || VIDEO_EXT.includes(ext);
+  res.json({ url: `/uploads/${req.file.filename}`, thumb: '', kind: isVideo ? 'video' : 'image', size: req.file.size, mime: req.file.mimetype });
 });
 
 /* ------------------------------- 会话列表 ------------------------------- */
@@ -232,7 +236,7 @@ function markReadBulk(uid, ids, convType, convId) {
 /* ------------------------------- 发送消息 ------------------------------- */
 router.post('/messages', (req, res) => {
   const uid = req.uid;
-  const { convType, convId, msg_type = 'text', content = '', media_url = '', media_thumb = '', one_time = false, clientId } = req.body || {};
+  const { convType, convId, msg_type = 'text', content = '', media_url = '', media_thumb = '', one_time = false, burn_sec, clientId } = req.body || {};
   if (convType === 'dm') {
     const peer = Number(String(convId).split('_').find((x) => Number(x) !== uid));
     if (blockedEither(uid, peer)) return res.status(403).json({ error: '你与对方已互相拉黑，无法发送消息' });
@@ -252,10 +256,13 @@ router.post('/messages', (req, res) => {
 
   const r = db
     .prepare(
-      `INSERT INTO messages (conv_type, conv_id, sender_id, msg_type, content, media_url, media_thumb, one_time, recalled, extra, created_at)
-       VALUES (?,?,?,?,?,?,?,?,0,'',?)`,
+      `INSERT INTO messages (conv_type, conv_id, sender_id, msg_type, content, media_url, media_thumb, one_time, burn_sec, recalled, extra, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,0,'',?)`,
     )
-    .run(convType, String(convId), uid, msg_type, String(content).slice(0, 2000), media_url, media_thumb, one_time ? 1 : 0, now());
+    .run(
+      convType, String(convId), uid, msg_type, String(content).slice(0, 2000), media_url, media_thumb,
+      one_time ? 1 : 0, one_time ? Math.min(Math.max(Number(burn_sec) || 5, 1), 300) : 5, now(),
+    );
   const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(r.lastInsertRowid);
   db.prepare('INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at) VALUES (?,?,?)').run(row.id, uid, now());
 

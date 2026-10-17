@@ -7,6 +7,7 @@ import {
 import EmojiPanel, { StickerView } from '../components/EmojiPanel.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import { bubbleTime, fmtDuration, groupByInitial } from '../lib/time.js';
+import { isVideoFile } from '../lib/media.js';
 
 const RECALL_WINDOW = 3 * 60 * 1000;
 
@@ -29,6 +30,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [onlineSheet, setOnlineSheet] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [oneTime, setOneTime] = useState(false);
+  const [oneTimeSec, setOneTimeSec] = useState('5');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
   const convKey = `${convType}_${convId}`;
@@ -143,13 +145,15 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   const pickFiles = (files) => {
-    setPendingFiles(files.map((f) => ({ file: f, url: URL.createObjectURL(f), type: f.type?.startsWith('video') ? 'video' : 'image' })));
+    setPendingFiles(files.map((f) => ({ file: f, url: URL.createObjectURL(f), type: isVideoFile(f) ? 'video' : 'image' })));
     setOneTime(false);
+    setOneTimeSec('5');
     setPanel('confirm');
   };
 
   const doSendMedia = async () => {
     if (!pendingFiles.length) return;
+    const burnSec = Math.min(Math.max(Number(oneTimeSec) || 5, 1), 300);
     setSending(true);
     setPanel(null);
     try {
@@ -157,12 +161,12 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         const up = await api.upload(item.file, item.type);
         const d = await api.post('/api/messages', {
           convType, convId, msg_type: up.kind === 'video' ? 'video' : 'image',
-          media_url: up.url, media_thumb: '', one_time: oneTime,
+          media_url: up.url, media_thumb: '', one_time: oneTime, burn_sec: burnSec,
         });
         setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
       }
       setTimeout(scrollToBottom, 60);
-      toast(oneTime ? '一次性消息已发送（对方查看后自动销毁）' : '发送成功');
+      toast(oneTime ? `一次性消息已发送（对方查看后 ${burnSec} 秒自动销毁）` : '发送成功');
     } catch (e) {
       toast(e.message, 'error');
     } finally {

@@ -119,6 +119,7 @@ export function buildMessage(row, extra = {}) {
     media_url: row.media_url,
     media_thumb: row.media_thumb,
     one_time: !!row.one_time,
+    burn_sec: row.burn_sec || 5,
     recalled: !!row.recalled,
     extra: row.extra ? safeJson(row.extra) : null,
     read_count: readCount,

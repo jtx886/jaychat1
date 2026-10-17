@@ -58,7 +58,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function http(path, { method = 'GET', body, token, raw } = {}) {
+export async function http(path, { method = 'GET', body, token, raw, timeout } = {}) {
   const headers = {};
   const t = token ?? tokenStore.get();
   if (t) headers.Authorization = `Bearer ${t}`;
@@ -71,7 +71,7 @@ export async function http(path, { method = 'GET', body, token, raw } = {}) {
   }
   let res;
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeout || 15000) : null;
   try {
     res = await fetch(getBase() + path, { method, headers, body: payload, signal: ctrl?.signal });
   } catch (e) {
@@ -94,7 +94,8 @@ export const api = {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('kind', kind || (file.type?.startsWith('video') ? 'video' : 'image'));
-    return http('/api/upload', { method: 'POST', body: fd });
+    // 图片/视频上传体积大、耗时长，单独放宽超时（3 分钟）
+    return http('/api/upload', { method: 'POST', body: fd, timeout: 180000 });
   },
 };
 
