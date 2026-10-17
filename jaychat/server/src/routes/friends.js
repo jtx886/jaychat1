@@ -2,7 +2,7 @@ import express from 'express';
 import { db, now } from '../db.js';
 import { requireAuth } from '../auth.js';
 import {
-  getUser, publicUser, areFriends, addFriend, createNotification, sendToUser,
+  getUser, publicUser, areFriends, addFriend, createNotification, sendToUser, isBlocked,
 } from '../store.js';
 import { friendAddIm, friendDeleteIm, friendRemarkIm } from '../im-sync.js';
 
@@ -27,6 +27,7 @@ router.post('/request', (req, res) => {
   const message = String(req.body?.message || '').slice(0, 60);
   if (!to || to === req.uid) return res.status(400).json({ error: '参数错误' });
   if (!getUser(to)) return res.status(404).json({ error: '用户不存在' });
+  if (isBlocked(to, req.uid)) return res.status(403).json({ error: '对方已拒绝接收好友申请' });
   if (areFriends(req.uid, to)) return res.status(400).json({ error: '你们已经是好友了' });
   const dup = db
     .prepare(`SELECT id FROM friend_requests WHERE status='pending' AND from_id=? AND to_id=?`)
@@ -86,6 +87,35 @@ router.delete('/:userId', (req, res) => {
   db.prepare('DELETE FROM friendships WHERE user_id=? AND friend_id=?').run(f, req.uid);
   friendDeleteIm(req.uid, f).catch(() => {});
   sendToUser(f, { type: 'friend:remove', data: { userId: req.uid } });
+  res.json({ ok: true });
+});
+
+// 拉黑（同时解除好友关系）
+router.post('/block', (req, res) => {
+  const f = Number(req.body?.userId);
+  if (!f || f === req.uid) return res.status(400).json({ error: '参数错误' });
+  if (!getUser(f)) return res.status(404).json({ error: '用户不存在' });
+  db.prepare('INSERT OR IGNORE INTO blocks (user_id, blocked_id, created_at) VALUES (?,?,?)').run(req.uid, f, now());
+  db.prepare('DELETE FROM friendships WHERE user_id=? AND friend_id=?').run(req.uid, f);
+  db.prepare('DELETE FROM friendships WHERE user_id=? AND friend_id=?').run(f, req.uid);
+  db.prepare(`UPDATE friend_requests SET status='rejected' WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?)`).run(req.uid, f, f, req.uid);
+  friendDeleteIm(req.uid, f).catch(() => {});
+  sendToUser(f, { type: 'friend:remove', data: { userId: req.uid } });
+  res.json({ ok: true });
+});
+
+// 黑名单列表
+router.get('/blocks', (req, res) => {
+  const rows = db
+    .prepare(`SELECT u.*, b.created_at AS blocked_at FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.user_id = ? ORDER BY b.created_at DESC`)
+    .all(req.uid);
+  res.json({ blocks: rows.map((u) => ({ ...publicUser(u), blocked_at: u.blocked_at })) });
+});
+
+// 解除拉黑
+router.delete('/block/:userId', (req, res) => {
+  const f = Number(req.params.userId);
+  db.prepare('DELETE FROM blocks WHERE user_id=? AND blocked_id=?').run(req.uid, f);
   res.json({ ok: true });
 });
 

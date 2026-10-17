@@ -19,6 +19,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [members, setMembers] = useState([]);
   const [group, setGroup] = useState(null);
   const [dnd, setDnd] = useState(false);
+  const [peer, setPeer] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmAct, setConfirmAct] = useState(null); // 'delete' | 'block'
   const [viewer, setViewer] = useState(null);
   const [actionMsg, setActionMsg] = useState(null);
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -52,6 +55,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         setMembers(g.members || []);
         setGroup(g.group);
         setDnd(!!g.group?.dnd);
+      } else {
+        api.get(`/api/users/${peerId}`).then((u) => setPeer(u.user)).catch(() => {});
       }
       refreshConversations();
     } catch (e) {
@@ -194,6 +199,28 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     }
   };
 
+  const doDeleteFriend = async () => {
+    try {
+      await api.del(`/api/friends/${peerId}`);
+      toast('已删除好友');
+      refreshConversations();
+      back();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  const doBlockPeer = async () => {
+    try {
+      await api.post('/api/friends/block', { userId: peerId });
+      toast('已拉黑该用户');
+      refreshConversations();
+      back();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
   const doDeleteLocal = (m) => setMessages((list) => list.filter((x) => x.id !== m.id));
   const doCopy = async (m) => {
     try {
@@ -241,6 +268,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             name={senderName}
             size={38}
             showOnline={!isAI}
+            onClick={!isAI && m.sender?.id ? () => app.openUser(m.sender) : undefined}
           />
         ) : null}
         <div style={{ maxWidth: '78%', minWidth: 0 }}>
@@ -330,7 +358,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             ) : null}
             <button
               className="icon-btn"
-              onClick={() => (isGroup ? push('groupInfo', { groupId: Number(convId) }) : push('friendInfo', { userId: peerId }))}
+              onClick={() => (isGroup ? push('groupInfo', { groupId: Number(convId) }) : setMenuOpen(true))}
               aria-label="更多"
             >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
@@ -468,7 +496,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         ) : (
           <div className="list">
             {onlineMembers.map((m) => (
-              <div key={m.id} className="list-item">
+              <div key={m.id} className="list-item" onClick={() => app.openUser({ ...m, online: true })}>
                 <Avatar user={m} size={44} online />
                 <div className="list-main">
                   <div className="list-title">{m.remark || m.username}</div>
@@ -480,6 +508,40 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
           </div>
         )}
       </Sheet>
+
+      {/* 私聊右上角菜单：查看资料 / 删除好友 / 拉黑 */}
+      {!isGroup ? (
+        <ActionSheet
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          title={peer?.remark || peer?.username || title}
+          actions={[
+            { icon: '🧑', label: '查看资料', onClick: () => push('friendInfo', { userId: peerId }) },
+            peer?.is_friend === false
+              ? { icon: '➕', label: '加为好友', onClick: () => push('friendInfo', { userId: peerId }) }
+              : { icon: '🗑️', label: '删除好友', danger: true, onClick: () => setConfirmAct('delete') },
+            { icon: '🚫', label: '拉黑', danger: true, onClick: () => setConfirmAct('block') },
+          ]}
+        />
+      ) : null}
+
+      <ActionSheet
+        open={!!confirmAct}
+        onClose={() => setConfirmAct(null)}
+        title={
+          confirmAct === 'block'
+            ? `拉黑「${peer?.username || title}」？拉黑后将解除好友关系，双方互相收不到消息`
+            : `删除好友「${peer?.username || title}」？`
+        }
+        actions={[
+          {
+            icon: confirmAct === 'block' ? '🚫' : '🗑️',
+            label: confirmAct === 'block' ? '确定拉黑' : '删除好友',
+            danger: true,
+            onClick: confirmAct === 'block' ? doBlockPeer : doDeleteFriend,
+          },
+        ]}
+      />
 
       {/* 消息操作 */}
       <ActionSheet

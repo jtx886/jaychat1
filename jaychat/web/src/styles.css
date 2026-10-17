@@ -170,6 +170,8 @@ body {
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-ring { box-shadow: 0 0 0 2px rgba(255,255,255,.18), 0 6px 18px rgba(0,0,0,.35); }
+.avatar-tap { transition: transform .22s var(--ease-spring), box-shadow .22s var(--ease-out); }
+.avatar-tap:active { transform: scale(.88); box-shadow: 0 0 0 2px rgba(99,147,255,.65), 0 4px 12px rgba(0,0,0,.4); }
 .dot-online {
   position: absolute; right: -2px; bottom: -2px; border-radius: 50%;
   background: var(--ok); box-shadow: 0 0 0 2.5px rgba(7,11,24,.95), 0 0 10px rgba(47,208,123,.8);
@@ -386,8 +388,8 @@ body {
 
 .splash { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: var(--bg-0); }
 .logo-mark {
-  width: 92px; height: 92px; border-radius: 28px; background: var(--brand-grad); display: flex; align-items: center; justify-content: center;
-  font-size: 42px; box-shadow: var(--shadow-glow); animation: popIn .6s var(--ease-spring) both, floaty 3.6s ease-in-out infinite;
+  width: 92px; height: 92px; border-radius: 28px; background: #20264f; display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-glow); animation: popIn .6s var(--ease-spring) both, floaty 3.6s ease-in-out infinite;
 }
 @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 .splash-name { font-size: 24px; font-weight: 800; letter-spacing: 1px; background: linear-gradient(180deg,#fff,#a9c6ff); -webkit-background-clip: text; background-clip: text; color: transparent; }

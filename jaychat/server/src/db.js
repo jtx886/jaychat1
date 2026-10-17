@@ -136,6 +136,13 @@ CREATE TABLE IF NOT EXISTS dm_dnd (
   PRIMARY KEY (user_id, peer_id)
 );
 
+CREATE TABLE IF NOT EXISTS blocks (
+  user_id INTEGER NOT NULL,
+  blocked_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, blocked_id)
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,

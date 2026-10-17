@@ -57,25 +57,88 @@ export const EMOJI_CATEGORIES = [
   },
 ];
 
-/** 动画表情包（内置动画贴纸；同时支持从远端数据源扩充） */
-export const STICKERS = [
-  { id: 's1', emoji: '😂', anim: 'bounce', label: '笑哭' },
-  { id: 's2', emoji: '🤣', anim: 'spin', label: '打滚' },
-  { id: 's3', emoji: '😭', anim: 'shake', label: '大哭' },
-  { id: 's4', emoji: '🥰', anim: 'pulse', label: '心心' },
-  { id: 's5', emoji: '😡', anim: 'shakeY', label: '生气' },
-  { id: 's6', emoji: '👍', anim: 'pop', label: '点赞' },
-  { id: 's7', emoji: '🎉', anim: 'swing', label: '庆祝' },
-  { id: 's8', emoji: '❤️', anim: 'beat', label: '爱心' },
-  { id: 's9', emoji: '🤯', anim: 'zoom', label: '震惊' },
-  { id: 's10', emoji: '😴', anim: 'float', label: '睡了' },
-  { id: 's11', emoji: '🙏', anim: 'wobble', label: '拜托' },
-  { id: 's12', emoji: '🐶', anim: 'jelly', label: '小狗' },
-  { id: 's13', emoji: '🍺', anim: 'swing', label: '干杯' },
-  { id: 's14', emoji: '🤝', anim: 'bounce', label: '握手' },
-  { id: 's15', emoji: '💰', anim: 'rainbow', label: '搞钱' },
-  { id: 's16', emoji: '🤖', anim: 'jelly', label: '机器人' },
+/* ============ 动画表情包：微信 / QQ 同款大数据表情包（多套分组） ============ */
+const PACK_DEFS = [
+  {
+    key: 'wechat',
+    name: '微信经典',
+    icon: '💬',
+    faces: [
+      ['😊', '微笑', 'bounce'], ['😍', '色', 'pulse'], ['😏', '得意', 'swing'],
+      ['😢', '流泪', 'float'], ['😁', '呲牙', 'pop'], ['😭', '大哭', 'shake'],
+      ['😡', '发怒', 'shakeY'], ['😎', '酷', 'wobble'], ['🤭', '偷笑', 'jelly'],
+      ['🤔', '疑问', 'zoom'], ['😱', '惊恐', 'shakeY'], ['😴', '睡', 'float'],
+      ['😪', '困', 'jelly'], ['😰', '冷汗', 'shake'], ['🤤', '饥饿', 'beat'],
+      ['😅', '尴尬', 'bounce'], ['💀', '骷髅', 'spin'], ['👏', '鼓掌', 'pop'],
+      ['🙏', '抱拳', 'wobble'], ['👍', '强', 'bounce'], ['👎', '弱', 'shakeY'],
+      ['💪', '奋斗', 'beat'], ['🤝', '握手', 'bounce'], ['🍺', '啤酒', 'swing'],
+    ],
+  },
+  {
+    key: 'qq',
+    name: 'QQ 表情',
+    icon: '🐧',
+    faces: [
+      ['😜', '调皮', 'swing'], ['😝', '吐舌', 'jelly'], ['🙄', '白眼', 'spin'],
+      ['😤', '傲慢', 'shakeY'], ['🤬', '咒骂', 'shake'], ['😈', '阴险', 'pulse'],
+      ['😘', '亲亲', 'beat'], ['🥺', '委屈', 'float'], ['😖', '折磨', 'shake'],
+      ['😨', '吓', 'zoom'], ['😞', '衰', 'float'], ['🔨', '敲打', 'swing'],
+      ['🍉', '西瓜', 'bounce'], ['🏀', '篮球', 'bounce'], ['⚽', '足球', 'spin'],
+      ['🐷', '猪头', 'jelly'], ['🌹', '玫瑰', 'pulse'], ['🎁', '礼物', 'pop'],
+      ['❤️', '爱心', 'beat'], ['💔', '心碎', 'shake'], ['⚡', '闪电', 'zoom'],
+      ['🤗', '拥抱', 'jelly'], ['✌️', '胜利', 'swing'], ['👊', '拳头', 'bounce'],
+    ],
+  },
+  {
+    key: 'fun',
+    name: '搞怪',
+    icon: '🤪',
+    faces: [
+      ['💩', '便便', 'jelly'], ['🤡', '小丑', 'spin'], ['👻', '鬼魂', 'float'],
+      ['👽', '外星人', 'pulse'], ['🤖', '机器人', 'jelly'], ['🐔', '小鸡', 'swing'],
+      ['🦄', '独角兽', 'rainbow'], ['🐸', '青蛙', 'bounce'], ['🙈', '捂眼', 'shakeY'],
+      ['🤪', '疯狂', 'swing'], ['🤠', '牛仔', 'wobble'], ['🥳', '派对', 'pop'],
+      ['🎉', '撒花', 'swing'], ['🎆', '烟花', 'rainbow'], ['💣', '炸弹', 'zoom'],
+      ['🚀', '火箭', 'float'], ['🍄', '蘑菇', 'pop'], ['🧁', '纸杯蛋糕', 'beat'],
+    ],
+  },
+  {
+    key: 'animal',
+    name: '萌宠',
+    icon: '🐼',
+    faces: [
+      ['🐼', '熊猫', 'jelly'], ['🐨', '考拉', 'float'], ['🦊', '狐狸', 'swing'],
+      ['🐯', '老虎', 'shakeY'], ['🐵', '猴子', 'bounce'], ['🐰', '兔子', 'pop'],
+      ['🐻', '熊', 'wobble'], ['🦁', '狮子', 'shake'], ['🐮', '奶牛', 'pulse'],
+      ['🐙', '章鱼', 'jelly'], ['🦀', '螃蟹', 'swing'], ['🐢', '乌龟', 'float'],
+      ['🦋', '蝴蝶', 'swing'], ['🐝', '蜜蜂', 'zoom'], ['🐬', '海豚', 'bounce'],
+      ['🐶', '小狗', 'bounce'], ['🐱', '猫咪', 'pulse'], ['🐧', '企鹅', 'wobble'],
+    ],
+  },
+  {
+    key: 'daily',
+    name: '日常',
+    icon: '☕',
+    faces: [
+      ['☕', '咖啡', 'swing'], ['🍜', '面条', 'jelly'], ['🍔', '汉堡', 'bounce'],
+      ['🍕', '披萨', 'pop'], ['🍰', '蛋糕', 'beat'], ['🍦', '冰淇淋', 'pulse'],
+      ['🎮', '游戏', 'shake'], ['🎧', '耳机', 'swing'], ['📱', '手机', 'wobble'],
+      ['💰', '搞钱', 'rainbow'], ['💸', '飞钱', 'bounce'], ['🎯', '靶心', 'zoom'],
+      ['🏆', '奖杯', 'pop'], ['🔥', '火苗', 'pulse'], ['✨', '闪光', 'rainbow'],
+      ['🎵', '音符', 'swing'], ['🌈', '彩虹', 'rainbow'], ['🍀', '幸运草', 'swing'],
+    ],
+  },
 ];
+
+export const STICKER_PACKS = PACK_DEFS.map((p) => ({
+  key: p.key,
+  name: p.name,
+  icon: p.icon,
+  items: p.faces.map(([emoji, label, anim], i) => ({ id: `${p.key}-${i}`, emoji, label, anim })),
+}));
+
+/** 全量动画贴纸（供聊天消息渲染 / 汇总展示） */
+export const STICKERS = STICKER_PACKS.flatMap((p) => p.items);
 
 export const ANIM_CLASS = {
   bounce: 'anim-bounce',

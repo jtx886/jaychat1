@@ -2,9 +2,11 @@ import React from 'react';
 import { mediaUrl } from '../api.js';
 import { Avatar } from '../components/ui.jsx';
 import { fullTime } from '../lib/time.js';
+import { useApp } from '../App.jsx';
 
 /** 动态卡片：动态流 / 好友动态 / 个人动态共用 */
 export default function MomentCard({ moment, onOpen, onLike, showCommentPreview = true }) {
+  const { openUser } = useApp();
   const m = moment;
   const media = (m.media || []).filter((x) => x.url);
   const nCls = media.length === 1 ? 'n1' : media.length === 2 || media.length === 4 ? 'n2' : 'n3';
@@ -13,7 +15,7 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
   return (
     <div className="moment-card glass glass-strong">
       <div className="moment-head">
-        <Avatar user={m.author} size={44} />
+        <Avatar user={m.author} size={44} onClick={m.author?.id ? () => openUser(m.author) : undefined} />
         <div className="grow">
           <div style={{ fontWeight: 700, fontSize: 14.5 }}>
             {m.author?.username}

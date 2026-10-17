@@ -4,7 +4,7 @@ import { useApp } from '../App.jsx';
 import { Avatar, Empty, Loading, TopBar, toast, Sheet } from '../components/ui.jsx';
 
 export default function AddFriendScreen({ tab = 'search' }) {
-  const { back, refreshBadges } = useApp();
+  const { back, refreshBadges, openUser } = useApp();
   const [mode, setMode] = useState(tab);
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
@@ -105,7 +105,7 @@ export default function AddFriendScreen({ tab = 'search' }) {
                     const pending = u.request?.direction === 'out' || sentIds.has(u.id);
                     return (
                       <div key={u.id} className="list-item">
-                        <Avatar user={u} size={46} />
+                        <Avatar user={u} size={46} onClick={u?.id ? () => openUser(u) : undefined} />
                         <div className="list-main">
                           <div className="list-title">
                             {u.username}

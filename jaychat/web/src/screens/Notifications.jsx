@@ -14,7 +14,7 @@ const TYPE_META = {
 };
 
 export default function NotificationsScreen() {
-  const { back, refreshBadges, setNotifyUnread, push } = useApp();
+  const { back, refreshBadges, setNotifyUnread, push, openUser } = useApp();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,7 +60,7 @@ export default function NotificationsScreen() {
                 return (
                   <div key={n.id} className="list-item" onClick={() => onTap(n)}>
                     {n.actor ? (
-                      <Avatar user={n.actor} size={46} />
+                      <Avatar user={n.actor} size={46} onClick={n.actor?.id ? () => openUser(n.actor) : undefined} />
                     ) : (
                       <Avatar name={meta.icon} size={46} style={{ background: `linear-gradient(135deg, ${meta.color}, #2b3f8f)` }} />
                     )}

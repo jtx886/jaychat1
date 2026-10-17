@@ -13,6 +13,7 @@ export default function FriendInfoScreen({ userId }) {
   const [sheet, setSheet] = useState(null);
   const [remarkDraft, setRemarkDraft] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmBlock, setConfirmBlock] = useState(false);
 
   const dmKey = `${Math.min(Number(userId), Number(me.id))}_${Math.max(Number(userId), Number(me.id))}`;
   const conv = conversations.find((c) => c.conv_type === 'dm' && c.conv_id === dmKey);
@@ -68,6 +69,17 @@ export default function FriendInfoScreen({ userId }) {
     try {
       await api.del(`/api/friends/${userId}`);
       toast('已删除好友');
+      await refreshConversations();
+      back();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  const blockUser = async () => {
+    try {
+      await api.post('/api/friends/block', { userId: Number(userId) });
+      toast('已拉黑该用户');
       await refreshConversations();
       back();
     } catch (e) {
@@ -166,8 +178,9 @@ export default function FriendInfoScreen({ userId }) {
           </div>
         </div>
 
-        <div className="mx" style={{ marginTop: 18 }}>
-          <button className="btn btn-block btn-danger" onClick={() => setConfirmDelete(true)}>删除好友</button>
+        <div className="mx flex gap10" style={{ marginTop: 18 }}>
+          <button className="btn btn-block btn-danger grow" onClick={() => setConfirmDelete(true)}>删除好友</button>
+          <button className="btn btn-block btn-danger grow" onClick={() => setConfirmBlock(true)}>拉黑</button>
         </div>
         <div style={{ height: 20 }} />
       </div>
@@ -185,6 +198,13 @@ export default function FriendInfoScreen({ userId }) {
         onClose={() => setConfirmDelete(false)}
         title={`删除好友「${user.username}」？`}
         actions={[{ icon: '🗑️', label: '删除好友', danger: true, onClick: removeFriend }]}
+      />
+
+      <ActionSheet
+        open={confirmBlock}
+        onClose={() => setConfirmBlock(false)}
+        title={`拉黑「${user.username}」？拉黑后将解除好友关系，双方互相收不到消息`}
+        actions={[{ icon: '🚫', label: '确定拉黑', danger: true, onClick: blockUser }]}
       />
     </div>
   );

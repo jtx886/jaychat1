@@ -101,6 +101,20 @@ export default function MeScreen() {
           </div>
         </div>
 
+        <div className="section-head">隐私与安全</div>
+        <div className="glass mx">
+          <div className="list">
+            <div className="list-item" onClick={() => push('blacklist')}>
+              <span style={{ fontSize: 20 }}>🚫</span>
+              <div className="list-main">
+                <div className="list-title">黑名单</div>
+                <div className="list-desc">查看已拉黑用户，可随时解除拉黑</div>
+              </div>
+              <span className="chev dim">›</span>
+            </div>
+          </div>
+        </div>
+
         <div className="section-head">账号设置</div>
         <div className="glass mx">
           <div className="list">

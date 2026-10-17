@@ -6,7 +6,7 @@ import { fullTime } from '../lib/time.js';
 import MomentCard from '../components/MomentCard.jsx';
 
 export default function MomentDetailScreen({ momentId }) {
-  const { back, me, push } = useApp();
+  const { back, me, push, openUser } = useApp();
   const [moment, setMoment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -100,7 +100,7 @@ export default function MomentDetailScreen({ momentId }) {
             <div className="avatar-pick">
               {moment.likes.map((l, i) => (
                 <div key={i} style={{ textAlign: 'center' }}>
-                  <Avatar user={l.user} size={42} />
+                  <Avatar user={l.user} size={42} onClick={l.user?.id ? () => openUser(l.user) : undefined} />
                   <div className="hint" style={{ marginTop: 3 }}>{l.user?.username}</div>
                 </div>
               ))}
@@ -115,7 +115,7 @@ export default function MomentDetailScreen({ momentId }) {
           {moment.comments?.length ? (
             moment.comments.map((c) => (
               <div key={c.id} className="flex gap12" style={{ alignItems: 'flex-start', padding: '7px 0' }}>
-                <Avatar user={c.user} size={36} />
+                <Avatar user={c.user} size={36} onClick={c.user?.id ? () => openUser(c.user) : undefined} />
                 <div className="grow">
                   <div className="comment-line" style={{ padding: 0 }}>
                     <b>{c.user?.username}</b>

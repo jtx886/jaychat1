@@ -54,6 +54,11 @@ export default function HomeScreen() {
                 user={c.peer || { id: c.conv_id, username: c.name, avatar: c.avatar, is_official: c.is_official }}
                 size={50}
                 online={c.conv_type === 'dm' ? c.online : undefined}
+                onClick={
+                  c.peer
+                    ? (e) => { e.stopPropagation(); app.openUser({ ...c.peer, online: c.online }); }
+                    : undefined
+                }
               />
               <div className="list-main">
                 <div className="list-title">

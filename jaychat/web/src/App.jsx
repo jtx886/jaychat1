@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, tokenStore, ws, setBase, getBase } from './api.js';
-import { ToastHost, toast, Spinner } from './components/ui.jsx';
+import { ToastHost, toast, Spinner, LogoSvg } from './components/ui.jsx';
+import UserSheet from './components/UserSheet.jsx';
 import { ensureNotificationPermission, pushNotification, createChannel } from './lib/notify.js';
 import { loginIM, logoutIM } from './lib/im.js';
 
@@ -18,6 +19,7 @@ import PostMomentScreen from './screens/PostMoment.jsx';
 import EditProfileScreen from './screens/EditProfile.jsx';
 import ServerSettingsScreen from './screens/ServerSettings.jsx';
 import UserMomentsScreen from './screens/UserMoments.jsx';
+import BlacklistScreen from './screens/Blacklist.jsx';
 
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
@@ -34,6 +36,7 @@ export default function App() {
   const [reqCount, setReqCount] = useState(0);
   const [wsStatus, setWsStatus] = useState('idle');
   const [imStatus, setImStatus] = useState('idle');
+  const [sheetUser, setSheetUser] = useState(null);
   const openConvRef = useRef(null);
   const bootingRef = useRef(false);
   const seenMsgRef = useRef(new Set());
@@ -197,6 +200,11 @@ export default function App() {
     setStack((s) => (s.length ? s.slice(0, -1) : s));
   }, []);
   const reset = useCallback(() => setStack([]), []);
+  /** 打开用户卡片（点击头像时调用） */
+  const openUser = useCallback((user) => {
+    if (!user || !user.id) return;
+    setSheetUser(typeof user === 'object' ? user : { id: user });
+  }, []);
 
   // 安卓物理返回键 & 浏览器返回
   useEffect(() => {
@@ -258,16 +266,16 @@ export default function App() {
       conversations, refreshConversations, totalUnread, officialGroupId,
       notifyUnread, setNotifyUnread, reqCount, refreshBadges,
       wsStatus, imStatus, openConvRef, setBase, getBase,
-      route: stack[stack.length - 1], stack, push, back, reset,
+      route: stack[stack.length - 1], stack, push, back, reset, openUser,
     }),
-    [me, booted, presence, conversations, totalUnread, officialGroupId, notifyUnread, reqCount, wsStatus, imStatus, stack, push, back, reset, login, logout, setUser, refreshConversations, refreshBadges],
+    [me, booted, presence, conversations, totalUnread, officialGroupId, notifyUnread, reqCount, wsStatus, imStatus, stack, push, back, reset, openUser, login, logout, setUser, refreshConversations, refreshBadges],
   );
 
   if (!booted) {
     return (
       <div className="aurora grain">
         <div className="splash">
-          <div className="logo-mark">💬</div>
+          <div className="logo-mark"><LogoSvg size={68} bubble={false} /></div>
           <div className="splash-name">Jay Chat</div>
           <Spinner size={22} />
         </div>
@@ -278,7 +286,7 @@ export default function App() {
   if (!me) {
     return (
       <AppCtx.Provider value={ctx}>
-        <div className="aurora grain" />
+        <div className="aurora grain"><i /><i /><i /><i /></div>
         <AuthScreen />
         <ToastHost />
       </AppCtx.Provider>
@@ -313,6 +321,8 @@ export default function App() {
         return <ServerSettingsScreen />;
       case 'userMoments':
         return <UserMomentsScreen {...r.params} />;
+      case 'blacklist':
+        return <BlacklistScreen />;
       default:
         return <MainShell />;
     }
@@ -320,7 +330,7 @@ export default function App() {
 
   return (
     <AppCtx.Provider value={ctx}>
-      <div className="aurora grain" />
+      <div className="aurora grain"><i /><i /><i /><i /></div>
       <div className="app-shell">
         <div
           key={stack[stack.length - 1]?.key || 'root'}
@@ -329,6 +339,7 @@ export default function App() {
           {renderRoute()}
         </div>
       </div>
+      <UserSheet user={sheetUser} onClose={() => setSheetUser(null)} />
       <ToastHost />
     </AppCtx.Provider>
   );
