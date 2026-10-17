@@ -501,6 +501,38 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
           </div>
           <div className={'switch' + (oneTime ? ' on' : '')} onClick={() => setOneTime((v) => !v)}><i /></div>
         </div>
+        {oneTime ? (
+          <div className="glass pad mt">
+            <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="clock" size={15} strokeWidth={1.9} /> 对方可观看时长
+            </div>
+            <div className="hint">自定义对方查看该内容后自动销毁的秒数（1–300 秒）</div>
+            <div className="flex gap6 mt" style={{ flexWrap: 'wrap' }}>
+              {[3, 5, 10, 30, 60].map((sec) => (
+                <button
+                  key={sec}
+                  className={'chip' + (Number(oneTimeSec) === sec ? ' active' : '')}
+                  onClick={() => setOneTimeSec(String(sec))}
+                >
+                  {sec} 秒
+                </button>
+              ))}
+            </div>
+            <div className="glass pad mt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14 }}>自定义秒数</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={300}
+                value={oneTimeSec}
+                onChange={(e) => setOneTimeSec(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={() => setOneTimeSec(String(Math.min(Math.max(Number(oneTimeSec) || 5, 1), 300)))}
+                style={{ width: 96, textAlign: 'center' }}
+              />
+            </div>
+          </div>
+        ) : null}
         <button className="btn btn-primary btn-block mt" style={{ marginTop: 14 }} disabled={sending || !pendingFiles.length} onClick={doSendMedia}>
           {sending ? <Spinner size={18} /> : '发送'}
         </button>
