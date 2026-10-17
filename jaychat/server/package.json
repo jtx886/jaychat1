@@ -1,0 +1,20 @@
+{
+  "name": "jaychat-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jay Chat backend: REST + WebSocket realtime IM, moments, friends, AI",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
+    "tls-sig-api-v2": "^1.0.2",
+    "ws": "^8.18.0"
+  }
+}

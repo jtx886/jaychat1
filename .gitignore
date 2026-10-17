@@ -1,0 +1,22 @@
+# 依赖
+node_modules/
+*/node_modules/
+
+# 运行时数据
+jaychat/server/data/
+jaychat/server/uploads/
+
+# 安卓构建中间产物
+jaychat/web/android/.gradle/
+jaychat/web/android/build/
+jaychat/web/android/app/build/
+jaychat/web/android/capacitor-cordova-android-plugins/
+jaychat/web/android/local.properties
+jaychat/web/android/app/src/main/assets/public/
+jaychat/web/android/app/src/main/assets/capacitor.config.json
+jaychat/web/android/app/src/main/assets/capacitor.plugins.json
+
+# 日志与系统文件
+*.log
+.DS_Store
+*.hprof
