@@ -321,7 +321,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                     style={{ position: 'relative', height: 150, width: 190, background: 'rgba(255,176,32,.08)' }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setViewer({ url: m.media_url, type: m.msg_type, messageId: m.id, oneTime: true });
+                      setViewer({ url: m.media_url, type: m.msg_type, messageId: m.id, oneTime: true, burnSec: m.burn_sec });
                     }}
                   >
                     <Icon name="flame" size={32} filled color="#ff9d2e" />
@@ -615,6 +615,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         <MediaViewer
           item={{ url: viewer.url, type: viewer.type }}
           oneTimeView={!!viewer.oneTime}
+          burnSec={viewer.burnSec}
           onBurn={async () => {
             try {
               await api.post(`/api/messages/${viewer.messageId}/burn`, {});

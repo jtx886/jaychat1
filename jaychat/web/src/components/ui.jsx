@@ -201,7 +201,7 @@ export function Loading({ text = '加载中…' }) {
 }
 
 /* ============================ 媒体查看器 ============================ */
-export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn }) {
+export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn, burnSec }) {
   const [revealed, setRevealed] = useState(!oneTimeView);
   const closeTimer = useRef(null);
   useEffect(() => {
@@ -210,15 +210,16 @@ export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn })
   if (!item) return null;
   const isVideo = item.type === 'video' || item.msg_type === 'video';
   const url = mediaUrl(item.url || item.media_url);
+  const secs = Math.min(Math.max(Number(burnSec) || 5, 1), 300);
 
   const reveal = () => {
     setRevealed(true);
     onFirstView?.();
-    // 一次性消息：查看后 5 秒自动销毁并关闭
+    // 一次性消息：按发送方设定的时长自动销毁并关闭
     closeTimer.current = setTimeout(() => {
       onBurn?.();
       onClose?.();
-    }, 5000);
+    }, secs * 1000);
   };
 
   return (
@@ -233,13 +234,13 @@ export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn })
         <div className="one-time-overlay" onClick={(e) => e.stopPropagation()}>
           <div className="empty-icon"><Icon name="flame" size={34} strokeWidth={1.8} /></div>
           <div style={{ fontWeight: 700 }}>一次性消息</div>
-          <div className="hint">查看后 5 秒自动销毁，且对方无法再次查看</div>
+          <div className="hint">查看后 {secs} 秒自动销毁，且对方无法再次查看</div>
           <button className="btn btn-primary" onClick={reveal}>点击查看</button>
         </div>
       )}
       {revealed && oneTimeView ? (
         <div style={{ position: 'absolute', top: 20, left: 0, right: 0, textAlign: 'center', fontWeight: 700, color: '#ffd479' }}>
-          一次性消息 · 5 秒后自动销毁
+          一次性消息 · {secs} 秒后自动销毁
         </div>
       ) : null}
     </div>

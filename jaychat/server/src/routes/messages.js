@@ -23,16 +23,22 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 60 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 300 * 1024 * 1024 } });
 
 const VIDEO_EXT = ['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv', '.3gp', '.flv', '.wmv', '.mpeg', '.mpg'];
 
-router.post('/upload', requireAuth, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: '未收到文件' });
-  // 以文件本身为准判断类型：客户端提示（kind）与 MIME 都可能缺失或错误
-  const ext = path.extname(req.file.originalname || '').toLowerCase();
-  const isVideo = req.file.mimetype.startsWith('video') || VIDEO_EXT.includes(ext);
-  res.json({ url: `/uploads/${req.file.filename}`, thumb: '', kind: isVideo ? 'video' : 'image', size: req.file.size, mime: req.file.mimetype });
+router.post('/upload', requireAuth, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? '文件过大，单个文件最大支持 300MB' : err.message || '上传失败';
+      return res.status(400).json({ error: msg });
+    }
+    if (!req.file) return res.status(400).json({ error: '未收到文件' });
+    // 以文件本身为准判断类型：客户端提示（kind）与 MIME 都可能缺失或错误
+    const ext = path.extname(req.file.originalname || '').toLowerCase();
+    const isVideo = req.file.mimetype.startsWith('video') || VIDEO_EXT.includes(ext);
+    res.json({ url: `/uploads/${req.file.filename}`, thumb: '', kind: isVideo ? 'video' : 'image', size: req.file.size, mime: req.file.mimetype });
+  });
 });
 
 /* ------------------------------- 会话列表 ------------------------------- */

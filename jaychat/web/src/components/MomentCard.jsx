@@ -51,12 +51,18 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           {media.slice(0, 9).map((item, i) => (
             <div key={i} onClick={() => onOpen?.('detail')} style={{ position: 'relative', cursor: 'pointer' }}>
               {item.type === 'video' ? (
-                <video src={mediaUrl(item.url)} muted playsInline preload="metadata" />
+                <video
+                  src={mediaUrl(item.url)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onClick={(e) => e.stopPropagation()}
+                />
               ) : (
                 <img src={mediaUrl(item.url)} alt="" loading="lazy" />
               )}
               {item.type === 'video' ? (
-                <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 8, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fff' }}>
+                <span style={{ position: 'absolute', left: 6, top: 6, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 8, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fff' }}>
                   <Icon name="play" size={11} filled /> 视频
                 </span>
               ) : null}

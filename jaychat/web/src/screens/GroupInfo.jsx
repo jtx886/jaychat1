@@ -66,6 +66,15 @@ export default function GroupInfoScreen({ groupId }) {
   );
   const onlineCount = members.filter((m) => presence[m.id] ?? m.online).length;
 
+  // 群主/管理员可对成员执行管理操作；点击成员（含头像）统一打开管理菜单，普通成员点击查看资料
+  const canManage = !!(can.kick || can.mute || can.set_admin || can.transfer);
+  const onlineOf = (m) => presence[m.id] ?? m.online;
+  const memberTap = (m) => {
+    if (m.id === me.id) return;
+    if (m.role === 'owner' || !canManage) return openUser({ ...m, online: onlineOf(m) });
+    setTarget(m);
+  };
+
   const patchGroup = async (patch) => {
     try {
       const d = await api.patch(`/api/groups/${groupId}`, patch);
@@ -94,7 +103,9 @@ export default function GroupInfoScreen({ groupId }) {
     try {
       if (action === 'setAdmin') await api.post(`/api/groups/${groupId}/set-admin`, { userId: m.id, admin: true });
       if (action === 'unsetAdmin') await api.post(`/api/groups/${groupId}/set-admin`, { userId: m.id, admin: false });
+      if (action === 'profile') { openUser({ ...m, online: onlineOf(m) }); return; }
       if (action === 'mute') {
+        setTarget(m);
         setSheet('mute');
         return;
       }
@@ -233,7 +244,7 @@ export default function GroupInfoScreen({ groupId }) {
           <div className="list">
             <div className="section-head" style={{ padding: '12px 16px 6px' }}>群主 / 我</div>
             {members.filter((m) => m.id === me.id || m.role === 'owner').map((m) => (
-              <MemberRow key={m.id} m={m} online={presence[m.id] ?? m.online} me={me} onAvatar={() => m.id !== me.id && openUser({ ...m, online: presence[m.id] ?? m.online })} />
+              <MemberRow key={m.id} m={m} online={onlineOf(m)} me={me} onClick={() => memberTap(m)} onAvatar={() => memberTap(m)} />
             ))}
             {memberGroups.map((g) => (
               <React.Fragment key={g.letter}>
@@ -242,13 +253,10 @@ export default function GroupInfoScreen({ groupId }) {
                   <MemberRow
                     key={m.id}
                     m={m}
-                    online={presence[m.id] ?? m.online}
+                    online={onlineOf(m)}
                     me={me}
-                    onAvatar={() => m.id !== me.id && openUser({ ...m, online: presence[m.id] ?? m.online })}
-                    onClick={() => {
-                      if (!can.kick && !can.mute) return;
-                      setTarget(m);
-                    }}
+                    onClick={() => memberTap(m)}
+                    onAvatar={() => memberTap(m)}
                   />
                 ))}
               </React.Fragment>
@@ -320,7 +328,7 @@ export default function GroupInfoScreen({ groupId }) {
       </Sheet>
 
       {/* 禁言时长（自定义） */}
-      <Sheet open={sheet === 'mute'} onClose={() => setSheet(null)} title={`禁言 ${target?.username || ''}`}>
+      <Sheet open={sheet === 'mute'} onClose={() => { setSheet(null); setTarget(null); }} title={`禁言 ${target?.username || ''}`}>
         <div className="chip-row">
           {MUTE_OPTIONS.map((o) => (
             <div key={o.label} className={'chip' + (muteSel.label === o.label && !muteCustom ? ' active' : '')} onClick={() => { setMuteSel(o); setMuteCustom(''); }}>
@@ -343,6 +351,7 @@ export default function GroupInfoScreen({ groupId }) {
         actions={
           target
             ? [
+                { icon: <IconTile name="user" tone="sky" box={34} size={18} />, label: '查看资料', onClick: () => memberAction('profile') },
                 ...(can.set_admin && target.role !== 'owner'
                   ? [target.role === 'admin'
                     ? { icon: <IconTile name="chevronDown" tone="slate" box={34} size={18} />, label: '取消管理员', onClick: () => memberAction('unsetAdmin') }
