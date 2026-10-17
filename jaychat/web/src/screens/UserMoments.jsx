@@ -5,7 +5,7 @@ import { Avatar, Empty, Loading, TopBar, toast } from '../components/ui.jsx';
 import MomentCard from '../components/MomentCard.jsx';
 
 export default function UserMomentsScreen({ userId, mine }) {
-  const { back, me, push } = useApp();
+  const { back, me, push, openUser } = useApp();
   const isSelf = mine || Number(userId) === Number(me?.id);
   const [user, setUser] = useState(isSelf ? me : null);
   const [moments, setMoments] = useState([]);
@@ -62,7 +62,7 @@ export default function UserMomentsScreen({ userId, mine }) {
         {user ? (
           <div className="glass glass-strong mx" style={{ padding: 16, marginTop: 6 }}>
             <div className="flex gap12">
-              <Avatar user={user} size={60} />
+              <Avatar user={user} size={60} onClick={!isSelf && user?.id ? () => openUser(user) : undefined} />
               <div className="grow">
                 <div style={{ fontSize: 18, fontWeight: 800 }}>
                   {user.username}

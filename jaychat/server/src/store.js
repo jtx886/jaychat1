@@ -39,6 +39,21 @@ export function areFriends(a, b) {
   return !!r;
 }
 
+/** 我是否拉黑了对方 */
+export function isBlocked(ownerId, targetId) {
+  return !!db.prepare('SELECT 1 FROM blocks WHERE user_id = ? AND blocked_id = ?').get(ownerId, targetId);
+}
+
+/** 双向拉黑判断（任一方拉黑即视为不可通信） */
+export function blockedEither(a, b) {
+  return isBlocked(a, b) || isBlocked(b, a);
+}
+
+/** 我拉黑的用户 id 列表 */
+export function blockedIds(uid) {
+  return db.prepare('SELECT blocked_id FROM blocks WHERE user_id = ?').all(uid).map((r) => r.blocked_id);
+}
+
 export function friendIds(uid) {
   return db.prepare('SELECT friend_id FROM friendships WHERE user_id = ?').all(uid).map((r) => r.friend_id);
 }

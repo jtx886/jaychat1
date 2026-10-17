@@ -5,7 +5,7 @@ import { Avatar, Empty, Loading, InitialIndex, toast } from '../components/ui.js
 import { groupByInitial, initialOf } from '../lib/time.js';
 
 export default function ContactsScreen() {
-  const { push, presence, refreshBadges, refreshConversations, me } = useApp();
+  const { push, presence, refreshBadges, refreshConversations, me, openUser } = useApp();
   const [friends, setFriends] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +130,11 @@ export default function ContactsScreen() {
                   </div>
                   {g.items.map((f) => (
                     <div key={f.id} className="list-item" onClick={() => push('chat', { convType: 'dm', convId: dmId(f.id, me.id), title: f.remark || f.username, avatar: f.avatar })}>
-                      <Avatar user={{ ...f, online: presence[f.id] ?? f.online }} size={46} />
+                      <Avatar
+                        user={{ ...f, online: presence[f.id] ?? f.online }}
+                        size={46}
+                        onClick={(e) => { e.stopPropagation(); openUser({ ...f, online: presence[f.id] ?? f.online }); }}
+                      />
                       <div className="list-main">
                         <div className="list-title">
                           {f.remark || f.username}

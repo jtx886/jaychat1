@@ -1,6 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { mediaUrl } from '../api.js';
 
+/* ============================ Logo ============================ */
+/** Jay Chat 品牌标识（骷髅图标） */
+export function LogoSvg({ size = 40, bubble = true }) {
+  return (
+    <svg viewBox="0 0 512 512" width={size} height={size} aria-hidden="true">
+      {bubble ? <rect width="512" height="512" rx="115" fill="#20264f" /> : null}
+      <rect x="116" y="86" width="280" height="290" rx="142" fill="#f8f9fc" />
+      <rect x="178" y="300" width="156" height="126" rx="56" fill="#f8f9fc" />
+      <circle cx="196" cy="240" r="40" fill="#4d7cff" />
+      <circle cx="316" cy="240" r="40" fill="#4d7cff" />
+    </svg>
+  );
+}
+
+export function LogoMark({ size = 92, className = 'logo-mark' }) {
+  return (
+    <div className={className} style={{ width: size, height: size, borderRadius: Math.round(size * 0.3) }}>
+      <LogoSvg size={Math.round(size * 0.86)} bubble={false} />
+    </div>
+  );
+}
+
 /* ============================ 头像 ============================ */
 const PALETTE = [
   ['#5b9dff', '#3b6dff'], ['#7a5cff', '#5236e8'], ['#ff7a8a', '#e8435f'],
@@ -22,7 +44,7 @@ export function OfficialBadge({ size = 17, inline }) {
   );
 }
 
-export function Avatar({ user, name, src, size = 48, online, showOnline = true, radius, style, children }) {
+export function Avatar({ user, name, src, size = 48, online, showOnline = true, radius, style, children, onClick }) {
   const label = name || user?.username || '';
   const img = src ?? user?.avatar ?? '';
   const official = user?.is_official;
@@ -31,8 +53,9 @@ export function Avatar({ user, name, src, size = 48, online, showOnline = true, 
   const initial = label ? String(label).trim().charAt(0) : '?';
   return (
     <div
-      className="avatar avatar-ring"
-      style={{ width: size, height: size, borderRadius: r, background: img ? '#0b1226' : colorFor(user?.id || label.charCodeAt(0) || 1), fontSize: Math.round(size * 0.42), ...style }}
+      className={'avatar avatar-ring' + (onClick ? ' avatar-tap' : '')}
+      onClick={onClick}
+      style={{ width: size, height: size, borderRadius: r, background: img ? '#0b1226' : colorFor(user?.id || label.charCodeAt(0) || 1), fontSize: Math.round(size * 0.42), cursor: onClick ? 'pointer' : undefined, ...style }}
     >
       {img ? <img src={mediaUrl(img)} alt={label} /> : initial}
       {official ? <OfficialBadge size={Math.max(14, size * 0.34)} /> : null}

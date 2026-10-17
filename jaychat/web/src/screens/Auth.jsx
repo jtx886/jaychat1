@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, getBase } from '../api.js';
 import { useApp } from '../App.jsx';
-import { toast, Spinner } from '../components/ui.jsx';
+import { toast, Spinner, LogoMark } from '../components/ui.jsx';
 import { ensureNotificationPermission } from '../lib/notify.js';
 
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@(qq\.com|163\.com)$/;
@@ -103,7 +103,7 @@ export default function AuthScreen() {
     <div style={{ position: 'relative', zIndex: 2, height: '100%', display: 'flex', flexDirection: 'column', paddingTop: 'var(--safe-t)' }}>
       <div className="page-scroll" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '24px 20px' }}>
         <div style={{ textAlign: 'center', marginBottom: 26 }}>
-          <div className="logo-mark" style={{ margin: '0 auto 16px' }}>💬</div>
+          <LogoMark size={86} />
           <div className="splash-name" style={{ fontSize: 30 }}>Jay Chat</div>
           <div className="hint" style={{ marginTop: 8 }}>跨网络 · 实时聊天 · 官方群 · Jay AI</div>
         </div>

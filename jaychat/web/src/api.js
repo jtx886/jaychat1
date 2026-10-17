@@ -6,12 +6,16 @@ const LS_USER = 'jc_user';
 export const isNative = () => typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
 export const isAndroid = () => isNative() && window.Capacitor?.getPlatform?.() === 'android';
 
-/** 服务器地址：优先本地设置 > 构建时注入 > 同源 */
+/** App 内置默认服务器地址（打包进 APK，免手填） */
+const BUILTIN_BASE = 'https://jaychat-330497-11-1391073131.sh.run.tcloudbase.com';
+
+/** 服务器地址：优先本地设置 > 构建时注入 > App 内置 > 同源（网页版） */
 export function getBase() {
   const saved = localStorage.getItem(LS_SERVER);
   if (saved) return saved.replace(/\/$/, '');
   const env = import.meta.env.VITE_API_BASE;
   if (env) return String(env).replace(/\/$/, '');
+  if (isNative()) return BUILTIN_BASE;
   return '';
 }
 
@@ -66,10 +70,14 @@ export async function http(path, { method = 'GET', body, token, raw } = {}) {
     payload = JSON.stringify(body);
   }
   let res;
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
   try {
-    res = await fetch(getBase() + path, { method, headers, body: payload });
+    res = await fetch(getBase() + path, { method, headers, body: payload, signal: ctrl?.signal });
   } catch (e) {
-    throw new ApiError('网络不可用，请检查网络或服务器地址', 0);
+    throw new ApiError(e?.name === 'AbortError' ? '请求超时，请检查网络或服务器地址' : '网络不可用，请检查网络或服务器地址', 0);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   if (raw) return res;
   const data = await res.json().catch(() => ({}));

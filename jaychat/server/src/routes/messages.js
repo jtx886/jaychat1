@@ -7,7 +7,7 @@ import { requireAuth } from '../auth.js';
 import { PUBLIC_DIR, OFFICIAL_GROUP_NAME } from '../config.js';
 import {
   getUser, publicUser, areFriends, dmConvId, memberRole, groupMembers, buildMessage,
-  convParticipants, sendToUser, sendToUsers, safeJson,
+  convParticipants, sendToUser, sendToUsers, safeJson, blockedIds, blockedEither,
 } from '../store.js';
 import { isOnline } from '../realtime.js';
 import { askAI, AI_SYSTEM_PROMPT } from '../ai.js';
@@ -57,6 +57,7 @@ router.use(requireAuth);
 router.get('/conversations', (req, res) => {
   const uid = req.uid;
   const list = [];
+  const blocked = new Set(blockedIds(uid));
 
   // 群聊
   const groups = db
@@ -88,6 +89,7 @@ router.get('/conversations', (req, res) => {
     .all(uid);
   const seen = new Set();
   friends.forEach((f) => {
+    if (blocked.has(f.id)) return;
     const cid = dmConvId(uid, f.id);
     seen.add(cid);
     const lm = lastMessage('dm', cid);
@@ -115,6 +117,7 @@ router.get('/conversations', (req, res) => {
   dmRows.forEach((r) => {
     if (seen.has(r.conv_id)) return;
     const peerId = Number(String(r.conv_id).split('_').find((x) => Number(x) !== uid));
+    if (blocked.has(peerId)) return;
     const peer = getUser(peerId);
     if (!peer) return;
     const lm = lastMessage('dm', r.conv_id);
@@ -202,6 +205,10 @@ function markReadBulk(uid, ids, convType, convId) {
 router.post('/messages', (req, res) => {
   const uid = req.uid;
   const { convType, convId, msg_type = 'text', content = '', media_url = '', media_thumb = '', one_time = false, clientId } = req.body || {};
+  if (convType === 'dm') {
+    const peer = Number(String(convId).split('_').find((x) => Number(x) !== uid));
+    if (blockedEither(uid, peer)) return res.status(403).json({ error: '你与对方已互相拉黑，无法发送消息' });
+  }
   if (!checkAccess(uid, convType, convId)) return res.status(403).json({ error: '无权在该会话发送消息' });
 
   if (convType === 'group') {

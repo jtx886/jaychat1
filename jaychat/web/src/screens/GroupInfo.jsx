@@ -14,7 +14,7 @@ const MUTE_OPTIONS = [
 ];
 
 export default function GroupInfoScreen({ groupId }) {
-  const { back, push, presence, refreshConversations, me } = useApp();
+  const { back, push, presence, refreshConversations, me, openUser } = useApp();
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [can, setCan] = useState({});
@@ -232,7 +232,7 @@ export default function GroupInfoScreen({ groupId }) {
           <div className="list">
             <div className="section-head" style={{ padding: '12px 16px 6px' }}>群主 / 我</div>
             {members.filter((m) => m.id === me.id || m.role === 'owner').map((m) => (
-              <MemberRow key={m.id} m={m} online={presence[m.id] ?? m.online} me={me} />
+              <MemberRow key={m.id} m={m} online={presence[m.id] ?? m.online} me={me} onAvatar={() => m.id !== me.id && openUser({ ...m, online: presence[m.id] ?? m.online })} />
             ))}
             {memberGroups.map((g) => (
               <React.Fragment key={g.letter}>
@@ -243,6 +243,7 @@ export default function GroupInfoScreen({ groupId }) {
                     m={m}
                     online={presence[m.id] ?? m.online}
                     me={me}
+                    onAvatar={() => m.id !== me.id && openUser({ ...m, online: presence[m.id] ?? m.online })}
                     onClick={() => {
                       if (!can.kick && !can.mute) return;
                       setTarget(m);
@@ -361,10 +362,14 @@ export default function GroupInfoScreen({ groupId }) {
   );
 }
 
-function MemberRow({ m, online, me, onClick }) {
+function MemberRow({ m, online, me, onClick, onAvatar }) {
   return (
     <div className="list-item" onClick={onClick}>
-      <Avatar user={{ ...m, online }} size={44} />
+      <Avatar
+        user={{ ...m, online }}
+        size={44}
+        onClick={onAvatar ? (e) => { e.stopPropagation(); onAvatar(); } : undefined}
+      />
       <div className="list-main">
         <div className="list-title">
           {m.username}
