@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Sheet, ActionSheet, toast } from '../components/ui.jsx';
+import { Icon, IconTile } from '../components/icons.jsx';
 import { maskEmail } from '../lib/time.js';
 import { ensureNotificationPermission } from '../lib/notify.js';
 
@@ -33,10 +34,7 @@ export default function MeScreen() {
           <div className="topbar-sub">Jay Chat 个人中心</div>
         </div>
         <button className="icon-btn" onClick={() => push('serverSettings')} aria-label="设置">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none">
-            <circle cx="12" cy="12" r="3.1" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M12 3.6v2.2M12 18.2v2.2M4.6 12H6.8M17.2 12h2.2M6.8 6.8l1.6 1.6M15.6 15.6l1.6 1.6M17.2 6.8l-1.6 1.6M8.4 15.6l-1.6 1.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
+          <Icon name="settings" size={19} strokeWidth={1.7} />
         </button>
       </div>
 
@@ -75,7 +73,7 @@ export default function MeScreen() {
         <div className="glass mx">
           <div className="list">
             <div className="list-item" onClick={() => push('postMoment')}>
-              <span style={{ fontSize: 20 }}>✨</span>
+              <IconTile name="sparkle" tone="amber" />
               <div className="list-main">
                 <div className="list-title">发布动态</div>
                 <div className="list-desc">图文 / 视频，可设置谁可以看</div>
@@ -83,7 +81,7 @@ export default function MeScreen() {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item" onClick={() => push('userMoments', { userId: me.id, mine: true })}>
-              <span style={{ fontSize: 20 }}>📸</span>
+              <IconTile name="gallery" tone="sky" />
               <div className="list-main">
                 <div className="list-title">我的动态列表</div>
                 <div className="list-desc">查看自己发布的全部动态</div>
@@ -91,7 +89,7 @@ export default function MeScreen() {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item" onClick={() => push('moments', { scope: 'all' })}>
-              <span style={{ fontSize: 20 }}>🌍</span>
+              <IconTile name="globe" tone="brand" />
               <div className="list-main">
                 <div className="list-title">动态社区</div>
                 <div className="list-desc">看看全站用户都在发什么</div>
@@ -105,7 +103,7 @@ export default function MeScreen() {
         <div className="glass mx">
           <div className="list">
             <div className="list-item" onClick={() => push('blacklist')}>
-              <span style={{ fontSize: 20 }}>🚫</span>
+              <IconTile name="ban" tone="rose" />
               <div className="list-main">
                 <div className="list-title">黑名单</div>
                 <div className="list-desc">查看已拉黑用户，可随时解除拉黑</div>
@@ -119,7 +117,7 @@ export default function MeScreen() {
         <div className="glass mx">
           <div className="list">
             <div className="list-item" onClick={() => push('editProfile', { focus: 'avatar' })}>
-              <span style={{ fontSize: 20 }}>🖼️</span>
+              <IconTile name="image" tone="violet" />
               <div className="list-main">
                 <div className="list-title">更换头像</div>
                 <div className="list-desc">预设头像或上传本地图片</div>
@@ -127,7 +125,7 @@ export default function MeScreen() {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item" onClick={() => push('editProfile', { focus: 'name' })}>
-              <span style={{ fontSize: 20 }}>✏️</span>
+              <IconTile name="pencil" tone="cyan" />
               <div className="list-main">
                 <div className="list-title">更换昵称</div>
                 <div className="list-desc">1-6 个字符，每周最多 2 次（剩余 {remainder} 次）</div>
@@ -135,7 +133,7 @@ export default function MeScreen() {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item" onClick={async () => { const ok = await ensureNotificationPermission(); toast(ok ? '通知权限已开启' : '通知权限未开启'); }}>
-              <span style={{ fontSize: 20 }}>🔔</span>
+              <IconTile name="bell" tone="amber" />
               <div className="list-main">
                 <div className="list-title">通知权限</div>
                 <div className="list-desc">开启后可接收消息与互动通知</div>
@@ -143,7 +141,7 @@ export default function MeScreen() {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item" onClick={() => push('serverSettings')}>
-              <span style={{ fontSize: 20 }}>🌐</span>
+              <IconTile name="server" tone="slate" />
               <div className="list-main">
                 <div className="list-title">服务器地址</div>
                 <div className="list-desc">跨网络聊天所用的服务端地址</div>
@@ -163,7 +161,7 @@ export default function MeScreen() {
         open={confirmLogout}
         onClose={() => setConfirmLogout(false)}
         title="确定要退出登录吗？"
-        actions={[{ icon: '🚪', label: '退出登录', danger: true, onClick: logout }]}
+        actions={[{ icon: <IconTile name="logout" tone="rose" box={34} size={18} />, label: '退出登录', danger: true, onClick: logout }]}
       />
     </>
   );

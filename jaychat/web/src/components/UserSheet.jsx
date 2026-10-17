@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Sheet, ActionSheet, toast } from './ui.jsx';
+import { IconTile } from './icons.jsx';
 import { maskEmail } from '../lib/time.js';
 
 const dmId = (a, b) => {
@@ -62,12 +63,12 @@ export default function UserSheet({ user, onClose }) {
   };
 
   const actions = [
-    { icon: '📸', label: '查看 TA 的动态', onClick: goMoments },
+    { icon: <IconTile name="gallery" tone="sky" box={34} size={18} />, label: '查看 TA 的动态', onClick: goMoments },
     isFriend
-      ? { icon: '💬', label: '发消息', onClick: goChat }
-      : { icon: '➕', label: '加为好友', onClick: addFriend },
-    { icon: '详细资料', label: '查看资料', onClick: () => { onClose?.(); app.push('friendInfo', { userId: Number(user.id) }); } },
-    { icon: '🚫', label: '拉黑', danger: true, onClick: () => setConfirmBlock(true) },
+      ? { icon: <IconTile name="message" tone="brand" box={34} size={18} />, label: '发消息', onClick: goChat }
+      : { icon: <IconTile name="userPlus" tone="mint" box={34} size={18} />, label: '加为好友', onClick: addFriend },
+    { icon: <IconTile name="info" tone="slate" box={34} size={18} />, label: '查看资料', onClick: () => { onClose?.(); app.push('friendInfo', { userId: Number(user.id) }); } },
+    { icon: <IconTile name="ban" tone="rose" box={34} size={18} />, label: '拉黑', danger: true, onClick: () => setConfirmBlock(true) },
   ];
 
   return (
@@ -105,7 +106,7 @@ export default function UserSheet({ user, onClose }) {
                 <span>{a.label}</span>
               </div>
             ))}
-        </div>
+          </div>
 
         <button className="btn btn-block btn-ghost" style={{ marginTop: 12 }} onClick={onClose}>
           取消
@@ -116,7 +117,7 @@ export default function UserSheet({ user, onClose }) {
         open={confirmBlock}
         onClose={() => setConfirmBlock(false)}
         title={`拉黑「${user.username}」？拉黑后将解除好友关系并互相收不到消息`}
-        actions={[{ icon: '🚫', label: '确定拉黑', danger: true, onClick: doBlock }]}
+        actions={[{ icon: <IconTile name="ban" tone="rose" box={34} size={18} />, label: '确定拉黑', danger: true, onClick: doBlock }]}
       />
     </>
   );

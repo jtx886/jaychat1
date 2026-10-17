@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Empty, Loading, TopBar, Sheet, ActionSheet, Switch, toast } from '../components/ui.jsx';
+import { Icon, IconTile } from '../components/icons.jsx';
 import { fullTime, fromNow } from '../lib/time.js';
 import { mediaUrl } from '../api.js';
 
@@ -122,7 +123,7 @@ export default function FriendInfoScreen({ userId }) {
         <div className="glass mx mt">
           <div className="list">
             <div className="list-item" onClick={() => { setSheet('remark'); }}>
-              <span style={{ fontSize: 19 }}>📝</span>
+              <IconTile name="pencil" tone="cyan" />
               <div className="list-main">
                 <div className="list-title">设置朋友资料</div>
                 <div className="list-desc">添加备注名（最多 20 字）</div>
@@ -130,7 +131,7 @@ export default function FriendInfoScreen({ userId }) {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item">
-              <span style={{ fontSize: 19 }}>🔕</span>
+              <IconTile name="bellOff" tone="slate" />
               <div className="list-main">
                 <div className="list-title">消息免打扰</div>
                 <div className="list-desc">开启后对方消息不再弹出通知</div>
@@ -138,7 +139,7 @@ export default function FriendInfoScreen({ userId }) {
               <Switch on={dnd} onChange={toggleDnd} />
             </div>
             <div className="list-item" onClick={() => push('chat', { convType: 'dm', convId: dmKey, title: user.remark || user.username, avatar: user.avatar })}>
-              <span style={{ fontSize: 19 }}>💬</span>
+              <IconTile name="message" tone="brand" />
               <div className="list-main">
                 <div className="list-title">发消息</div>
               </div>
@@ -151,7 +152,7 @@ export default function FriendInfoScreen({ userId }) {
         <div className="glass mx">
           <div className="list">
             <div className="list-item" onClick={() => push('userMoments', { userId: Number(userId) })}>
-              <span style={{ fontSize: 19 }}>📸</span>
+              <IconTile name="gallery" tone="sky" />
               <div className="list-main">
                 <div className="list-title">查看好友动态</div>
                 <div className="list-desc">查看 TA 的全部未删除动态，可查看点赞与评论</div>
@@ -162,7 +163,7 @@ export default function FriendInfoScreen({ userId }) {
               <div key={m.id} className="list-item" onClick={() => push('momentDetail', { momentId: m.id })}>
                 {m.media?.[0]?.url ? (
                   m.media[0].type === 'video' ? (
-                    <div className="avatar" style={{ width: 46, height: 46, borderRadius: 12, background: '#0b1226' }}>🎬</div>
+                    <div className="avatar" style={{ width: 46, height: 46, borderRadius: 12, background: '#0b1226' }}><Icon name="videoCam" size={22} /></div>
                   ) : (
                     <img src={mediaUrl(m.media[0].url)} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover' }} />
                   )
@@ -171,7 +172,7 @@ export default function FriendInfoScreen({ userId }) {
                 )}
                 <div className="list-main">
                   <div className="list-title ellipsis" style={{ maxWidth: 220 }}>{m.text || '[图片/视频]'}</div>
-                  <div className="list-desc">❤️ {m.likes?.length || 0} · 💬 {m.comments?.length || 0} · {fullTime(m.created_at)}</div>
+                  <div className="list-desc"><span className="tally"><Icon name="heart" size={13} strokeWidth={2} /> {m.likes?.length || 0}</span> · <span className="tally"><Icon name="message" size={13} strokeWidth={2} /> {m.comments?.length || 0}</span> · {fullTime(m.created_at)}</div>
                 </div>
               </div>
             ))}
@@ -197,14 +198,14 @@ export default function FriendInfoScreen({ userId }) {
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title={`删除好友「${user.username}」？`}
-        actions={[{ icon: '🗑️', label: '删除好友', danger: true, onClick: removeFriend }]}
+        actions={[{ icon: <IconTile name="trash" tone="rose" box={34} size={18} />, label: '删除好友', danger: true, onClick: removeFriend }]}
       />
 
       <ActionSheet
         open={confirmBlock}
         onClose={() => setConfirmBlock(false)}
         title={`拉黑「${user.username}」？拉黑后将解除好友关系，双方互相收不到消息`}
-        actions={[{ icon: '🚫', label: '确定拉黑', danger: true, onClick: blockUser }]}
+        actions={[{ icon: <IconTile name="ban" tone="rose" box={34} size={18} />, label: '确定拉黑', danger: true, onClick: blockUser }]}
       />
     </div>
   );

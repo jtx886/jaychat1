@@ -58,6 +58,12 @@ router.get('/conversations', (req, res) => {
   const uid = req.uid;
   const list = [];
   const blocked = new Set(blockedIds(uid));
+  // 置顶会话（pinned 优先展示）
+  const pinnedRows = db
+    .prepare(`SELECT conv_type, conv_id, created_at FROM conversation_pins WHERE user_id=?`)
+    .all(uid);
+  const pinnedMap = new Map(pinnedRows.map((r) => [`${r.conv_type}_${r.conv_id}`, r.created_at]));
+  const pinnedAt = (convType, convId) => pinnedMap.get(`${convType}_${convId}`) || 0;
 
   // 群聊
   const groups = db
@@ -80,6 +86,7 @@ router.get('/conversations', (req, res) => {
       last: lm ? previewOf(lm) : null,
       last_time: lm?.created_at || g.created_at,
       sort_time: lm?.created_at || g.created_at,
+      pinned: pinnedAt('group', String(g.id)),
     });
   });
 
@@ -107,6 +114,7 @@ router.get('/conversations', (req, res) => {
       last: lm ? previewOf(lm) : null,
       last_time: lm?.created_at || 0,
       sort_time: lm?.created_at || 0,
+      pinned: pinnedAt('dm', cid),
     });
   });
 
@@ -134,12 +142,32 @@ router.get('/conversations', (req, res) => {
       last: lm ? previewOf(lm) : null,
       last_time: lm?.created_at || 0,
       sort_time: lm?.created_at || 0,
+      pinned: pinnedAt('dm', r.conv_id),
     });
   });
 
-  list.sort((a, b) => b.sort_time - a.sort_time);
+  list.sort((a, b) => b.pinned - a.pinned || b.sort_time - a.sort_time);
   const totalUnread = list.reduce((s, c) => s + (c.unread || 0), 0);
   res.json({ conversations: list, total_unread: totalUnread, official_group_id: db.prepare('SELECT id FROM groups WHERE is_official=1').get()?.id || 0 });
+});
+
+/* ------------------------------- 会话置顶 ------------------------------- */
+router.patch('/conversations/pin', (req, res) => {
+  const uid = req.uid;
+  const convType = String(req.body?.convType || '');
+  const convId = String(req.body?.convId || '');
+  const pinned = req.body?.pinned ? 1 : 0;
+  if (!['dm', 'group'].includes(convType) || !convId) return res.status(400).json({ error: '参数不合法' });
+  if (!checkAccess(uid, convType, convId)) return res.status(403).json({ error: '无权操作该会话' });
+  if (pinned) {
+    db.prepare(
+      `INSERT INTO conversation_pins (user_id, conv_type, conv_id, created_at) VALUES (?,?,?,?)
+       ON CONFLICT(user_id, conv_type, conv_id) DO UPDATE SET created_at = excluded.created_at`,
+    ).run(uid, convType, convId, now());
+  } else {
+    db.prepare('DELETE FROM conversation_pins WHERE user_id=? AND conv_type=? AND conv_id=?').run(uid, convType, convId);
+  }
+  res.json({ ok: true, pinned: !!pinned });
 });
 
 function previewOf(m) {

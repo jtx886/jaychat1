@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Empty, Loading, TopBar, toast } from '../components/ui.jsx';
+import { IconTile } from '../components/icons.jsx';
 import { fullTime, fromNow } from '../lib/time.js';
 
 const TYPE_META = {
-  friend_request: { icon: '👋', color: '#5b9dff' },
-  friend_accept: { icon: '✅', color: '#2fd07b' },
-  moment_like: { icon: '❤️', color: '#ff6b81' },
-  moment_comment: { icon: '💬', color: '#7a5cff' },
-  comment_reply: { icon: '↩️', color: '#ffb020' },
-  group_invite: { icon: '👥', color: '#3ad0e0' },
+  friend_request: { icon: 'userPlus', tone: 'sky' },
+  friend_accept: { icon: 'checkCircle', tone: 'mint' },
+  moment_like: { icon: 'heart', tone: 'rose' },
+  moment_comment: { icon: 'message', tone: 'violet' },
+  comment_reply: { icon: 'reply', tone: 'amber' },
+  group_invite: { icon: 'users', tone: 'cyan' },
 };
 
 export default function NotificationsScreen() {
@@ -51,18 +52,18 @@ export default function NotificationsScreen() {
         {loading ? (
           <Loading />
         ) : items.length === 0 ? (
-          <Empty icon="🔔" text="暂无通知" />
+          <Empty icon="bell" text="暂无通知" />
         ) : (
           <div className="glass mx">
             <div className="list">
               {items.map((n) => {
-                const meta = TYPE_META[n.type] || { icon: '🔔', color: '#5b9dff' };
+                const meta = TYPE_META[n.type] || { icon: 'bell', tone: 'sky' };
                 return (
                   <div key={n.id} className="list-item" onClick={() => onTap(n)}>
                     {n.actor ? (
                       <Avatar user={n.actor} size={46} onClick={n.actor?.id ? () => openUser(n.actor) : undefined} />
                     ) : (
-                      <Avatar name={meta.icon} size={46} style={{ background: `linear-gradient(135deg, ${meta.color}, #2b3f8f)` }} />
+                      <IconTile name={meta.icon} tone={meta.tone} box={46} size={22} />
                     )}
                     <div className="list-main">
                       <div className="list-title">

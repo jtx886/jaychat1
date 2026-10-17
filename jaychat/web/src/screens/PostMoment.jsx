@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Sheet, TopBar, toast, Spinner, MediaPicker } from '../components/ui.jsx';
+import { Icon, IconTile } from '../components/icons.jsx';
 
 const VIS_OPTIONS = [
-  { key: 'public', icon: '🌍', label: '公开', desc: '全站所有用户可见' },
-  { key: 'friends', icon: '👥', label: '好友可见', desc: '仅已添加的好友可见' },
-  { key: 'private', icon: '🔒', label: '私密', desc: '仅自己可见' },
-  { key: 'custom', icon: '✅', label: '指定好友可见', desc: '只让选中的好友看到' },
-  { key: 'exclude', icon: '🚫', label: '不给谁看', desc: '选中好友不可见' },
+  { key: 'public', icon: 'globe', tone: 'sky', label: '公开', desc: '全站所有用户可见' },
+  { key: 'friends', icon: 'users', tone: 'mint', label: '好友可见', desc: '仅已添加的好友可见' },
+  { key: 'private', icon: 'lock', tone: 'slate', label: '私密', desc: '仅自己可见' },
+  { key: 'custom', icon: 'checkCircle', tone: 'brand', label: '指定好友可见', desc: '只让选中的好友看到' },
+  { key: 'exclude', icon: 'ban', tone: 'rose', label: '不给谁看', desc: '选中好友不可见' },
 ];
 
 export default function PostMomentScreen() {
@@ -118,7 +119,7 @@ export default function PostMomentScreen() {
         <div className="glass mx mt">
           <div className="list">
             <div className="list-item" onClick={() => setVisSheet(true)}>
-              <span style={{ fontSize: 19 }}>{cur.icon}</span>
+              <IconTile name={cur.icon} tone={cur.tone} />
               <div className="list-main">
                 <div className="list-title">{cur.label}</div>
                 <div className="list-desc">{cur.desc}</div>
@@ -127,7 +128,7 @@ export default function PostMomentScreen() {
             </div>
             {visibility === 'custom' || visibility === 'exclude' ? (
               <div className="list-item" onClick={() => setPickSheet(true)}>
-                <span style={{ fontSize: 19 }}>👤</span>
+                <IconTile name="user" tone="violet" />
                 <div className="list-main">
                   <div className="list-title">{visibility === 'custom' ? '选择可见好友' : '选择不可见好友'}</div>
                   <div className="list-desc">已选 {picked.size} 位好友</div>
@@ -145,12 +146,12 @@ export default function PostMomentScreen() {
         <div className="list">
           {VIS_OPTIONS.map((v) => (
             <div key={v.key} className="list-item" onClick={() => { setVisibility(v.key); setVisSheet(false); if (v.key !== 'custom' && v.key !== 'exclude') setPicked(new Set()); }}>
-              <span style={{ fontSize: 20 }}>{v.icon}</span>
+              <IconTile name={v.icon} tone={v.tone} />
               <div className="list-main">
                 <div className="list-title">{v.label}</div>
                 <div className="list-desc">{v.desc}</div>
               </div>
-              {visibility === v.key ? <span className="ok-text">✓</span> : null}
+              {visibility === v.key ? <Icon name="check" size={18} strokeWidth={2.6} className="ok-text" /> : null}
             </div>
           ))}
         </div>
@@ -168,7 +169,7 @@ export default function PostMomentScreen() {
                 <div className="list-main">
                   <div className="list-title">{f.remark || f.username}</div>
                 </div>
-                <span style={{ width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, border: '1.5px solid ' + (picked.has(f.id) ? 'var(--brand-2)' : 'rgba(255,255,255,.24)'), background: picked.has(f.id) ? 'var(--brand-grad)' : 'transparent' }}>{picked.has(f.id) ? '✓' : ''}</span>
+                <span style={{ width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, border: '1.5px solid ' + (picked.has(f.id) ? 'var(--brand-2)' : 'rgba(255,255,255,.24)'), background: picked.has(f.id) ? 'var(--brand-grad)' : 'transparent' }}>{picked.has(f.id) ? <Icon name="check" size={14} strokeWidth={3} color="#fff" /> : null}</span>
               </div>
             ))}
           </div>

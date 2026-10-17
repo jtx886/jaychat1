@@ -65,7 +65,7 @@ export default function CreateGroupScreen() {
         {loading ? (
           <Loading />
         ) : friends.length === 0 ? (
-          <Empty icon="👥" text="还没有好友，先添加好友再建群吧" />
+          <Empty icon="users" text="还没有好友，先添加好友再建群吧" />
         ) : (
           <div className="glass mx">
             <div className="list">

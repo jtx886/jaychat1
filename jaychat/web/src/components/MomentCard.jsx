@@ -1,6 +1,7 @@
 import React from 'react';
 import { mediaUrl } from '../api.js';
 import { Avatar } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import { fullTime } from '../lib/time.js';
 import { useApp } from '../App.jsx';
 
@@ -39,7 +40,9 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
                 <img src={mediaUrl(item.url)} alt="" loading="lazy" />
               )}
               {item.type === 'video' ? (
-                <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 12, background: 'rgba(0,0,0,.5)', borderRadius: 8, padding: '1px 6px' }}>▶ 视频</span>
+                <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 8, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fff' }}>
+                  <Icon name="play" size={11} filled /> 视频
+                </span>
               ) : null}
             </div>
           ))}
@@ -48,15 +51,15 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
 
       <div className="moment-actions">
         <div className={'moment-act' + (m.liked ? ' liked' : '')} onClick={() => onLike?.(m)}>
-          <span>{m.liked ? '❤️' : '🤍'}</span>
+          <Icon name="heart" size={18} strokeWidth={1.9} filled={m.liked} color={m.liked ? '#ff8fa6' : undefined} />
           <span>{m.likes?.length ? `${m.likes.length} 赞` : '赞'}</span>
         </div>
         <div className="moment-act" onClick={() => onOpen?.('detail')}>
-          <span>💬</span>
+          <Icon name="message" size={18} strokeWidth={1.9} />
           <span>{m.comments?.length ? `${m.comments.length} 评论` : '评论'}</span>
         </div>
         <div className="moment-act" onClick={() => onOpen?.('detail')}>
-          <span>📄</span>
+          <Icon name="info" size={18} strokeWidth={1.9} />
           <span>详情</span>
         </div>
       </div>

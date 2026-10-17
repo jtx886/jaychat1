@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { mediaUrl } from '../api.js';
+import { Icon } from './icons.jsx';
 
 /* ============================ Logo ============================ */
 /** Jay Chat 品牌标识（骷髅图标） */
@@ -177,10 +178,10 @@ export function Switch({ on, onChange }) {
   return <div className={'switch' + (on ? ' on' : '')} onClick={() => onChange(!on)}><i /></div>;
 }
 
-export function Empty({ icon = '💬', text = '暂无内容' }) {
+export function Empty({ icon = 'message', text = '暂无内容' }) {
   return (
     <div className="empty">
-      <div className="icon">{icon}</div>
+      <div className="empty-icon"><Icon name={icon} size={30} strokeWidth={1.7} /></div>
       {text}
     </div>
   );
@@ -230,7 +231,7 @@ export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn })
         )
       ) : (
         <div className="one-time-overlay" onClick={(e) => e.stopPropagation()}>
-          <div style={{ fontSize: 46 }}>🔥</div>
+          <div className="empty-icon"><Icon name="flame" size={34} strokeWidth={1.8} /></div>
           <div style={{ fontWeight: 700 }}>一次性消息</div>
           <div className="hint">查看后 5 秒自动销毁，且对方无法再次查看</div>
           <button className="btn btn-primary" onClick={reveal}>点击查看</button>
