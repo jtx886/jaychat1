@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api, tokenStore, ws, setBase, getBase } from './api.js';
+import { api, tokenStore, ws, setBase, getBase, isNative } from './api.js';
 import { ToastHost, toast, Spinner, LogoSvg } from './components/ui.jsx';
 import UserSheet from './components/UserSheet.jsx';
 import { ensureNotificationPermission, pushNotification, createChannel } from './lib/notify.js';
@@ -210,15 +210,28 @@ export default function App() {
   useEffect(() => {
     const onPop = () => back();
     window.addEventListener('popstate', onPop);
-    const capApp = window.Capacitor?.Plugins?.App;
     let handle;
-    if (capApp) {
-      capApp.addListener('backButton', () => {
-        if (stack.length) back();
-        else capApp.exitApp?.();
-      }).then((h) => (handle = h));
+    let cancelled = false;
+    if (isNative()) {
+      // 用官方 @capacitor/app 的 addListener：它返回 thenable，能拿到可移除的句柄。
+      // 注意旧版全局代理是同步返回句柄，直接 .then 会抛错导致启动失败。
+      import('@capacitor/app')
+        .then(({ App }) =>
+          App.addListener('backButton', () => {
+            if (stack.length) back();
+            else App.exitApp?.();
+          }),
+        )
+        .then((h) => {
+          if (cancelled) h?.remove?.();
+          else handle = h;
+        })
+        .catch(() => {
+          /* 该平台不支持返回键监听时忽略 */
+        });
     }
     return () => {
+      cancelled = true;
       window.removeEventListener('popstate', onPop);
       handle?.remove?.();
     };
