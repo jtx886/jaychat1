@@ -1,0 +1,42 @@
+services:
+  jaychat:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: jaychat-server:latest
+    container_name: jaychat
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      DATA_DIR: /app/data
+    volumes:
+      - ./deploy/data:/app/data
+      - ./deploy/uploads:/app/public/uploads
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 可选：用 Caddy 自动申请 HTTPS 证书（有自己的域名时）
+  # 启用方式：取消下面注释并把 DOMAIN 写进 .env，访问 https://你的域名
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: jaychat-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   environment:
+  #     DOMAIN: ${DOMAIN}
+  #   volumes:
+  #     - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - ./deploy/caddy-data:/data
+  #     - ./deploy/caddy-config:/config
+  #   depends_on:
+  #     - jaychat

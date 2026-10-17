@@ -21,17 +21,54 @@
 jaychat/
   server/   Node.js (Express) 后端：账号、好友、群组、动态、通知、Jay AI、腾讯云 IM 服务端同步
   web/      前端 (Vite + React) + Capacitor 安卓工程
+  deploy/   一键部署脚本（Docker）
   release/  已签名的正式 APK
+  docker-compose.yml
 ```
 
-## 本地运行
+---
+
+## 一、部署后端（免费云主机，一次配好永久可用）
+
+> 聊天本身由腾讯云 IM 直连（跨网络实时）；后端负责注册登录、动态、通知、UserSig 与 Jay AI。
+> 下面以 **Ubuntu / Debian 云主机**（如 Oracle Cloud「始终免费」、其他厂商免费试用机）为例。
+
+```bash
+# 1. 在云主机上拿到代码
+git clone https://github.com/jtx886/jaychat1.git
+cd jaychat1/jaychat
+
+# 2. 一键部署（自动装 Docker、生成 .env、构建启动）
+sudo bash deploy/install.sh
+```
+
+脚本结束后会打印访问地址。随后：
+
+```bash
+docker compose logs -f          # 看日志
+git pull && docker compose up -d --build   # 更新版本
+```
+
+**放行端口**：脚本会自动处理 ufw / iptables；若用 Oracle / 阿里云 / AWS，还需在控制台「安全组 / 安全列表」放行 **TCP 3000**。
+
+**环境变量**：首次运行会由 `.env.example` 生成 `.env` 并随机化 `JWT_SECRET`。SMTP / 腾讯云 IM / AI 密钥已在其中，可按需修改后 `docker compose up -d`。
+
+**可选 HTTPS**：有自己域名时，编辑 `.env` 填 `DOMAIN=你的域名`，并取消 `docker-compose.yml` 中 `caddy` 段的注释，即自动申请证书，访问 `https://你的域名`。
+
+## 二、让 App 连上后端
+
+安装 APK 后：**我的 → 服务器地址 → 填 `http://<服务器IP>:3000` →（可选）内置浏览器访问该地址看「Jay Chat 运行中」）→ 测试连接成功**即可。后端同一端口也托管了网页版，手机浏览器可直接访问使用。
+
+> 想免去手动填写，可在构建时注入默认地址：`VITE_API_BASE=http://<服务器IP>:3000 npm run build`。
+
+## 三、本地开发
 
 后端：
 
 ```bash
 cd jaychat/server
 npm install
-node src/index.js        # 默认 http://0.0.0.0:3000
+node src/index.js        # http://0.0.0.0:3000
 ```
 
 前端：
@@ -53,11 +90,12 @@ cd android
 gradle assembleRelease   # 产物：app/build/outputs/apk/release/app-release.apk
 ```
 
-## 技术栈
+## 四、技术栈
 
 - 实时聊天：腾讯云 IM（`@tencentcloud/chat`）+ 服务端 REST 同步（`tls-sig-api-v2`）
 - 后端：Express + node:sqlite，邮件验证码使用 163 SMTP
 - 前端：Vite + React 18，毛玻璃 UI
+- 部署：Docker + docker compose，数据持久化在 `deploy/data`、`deploy/uploads`
 - 安卓：Capacitor 6，签名密钥 `web/android/app/jaychat-release.keystore`
 
 ## 下载
