@@ -1,0 +1,14 @@
+# 构建上下文忽略（上下文 = 仓库根目录）
+**/node_modules
+**/.git
+**/.DS_Store
+**/*.log
+
+# 运行时数据
+jaychat/server/data
+jaychat/server/public/uploads
+jaychat/deploy/data
+jaychat/deploy/uploads
+
+# 安卓工程
+jaychat/web/android
