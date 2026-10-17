@@ -97,7 +97,7 @@ export default function AddFriendScreen({ tab = 'search' }) {
             </div>
 
             {searching ? <Loading /> : null}
-            {!searching && results.length === 0 && q ? <Empty icon="🔍" text="没有找到相关用户" /> : null}
+            {!searching && results.length === 0 && q ? <Empty icon="search" text="没有找到相关用户" /> : null}
             {results.length > 0 ? (
               <div className="glass mx mt">
                 <div className="list">
@@ -134,7 +134,7 @@ export default function AddFriendScreen({ tab = 'search' }) {
         ) : (
           <>
             {requests.length === 0 ? (
-              <Empty icon="📨" text="暂无好友申请" />
+              <Empty icon="mail" text="暂无好友申请" />
             ) : (
               <div className="glass mx mt">
                 <div className="list">

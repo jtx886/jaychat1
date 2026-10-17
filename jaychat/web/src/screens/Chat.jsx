@@ -5,6 +5,7 @@ import {
   Avatar, TopBar, Sheet, ActionSheet, toast, Spinner, MediaViewer, MediaPicker, CameraPicker, Empty,
 } from '../components/ui.jsx';
 import EmojiPanel, { StickerView } from '../components/EmojiPanel.jsx';
+import { Icon, IconTile } from '../components/icons.jsx';
 import { bubbleTime, fmtDuration, groupByInitial } from '../lib/time.js';
 
 const RECALL_WINDOW = 3 * 60 * 1000;
@@ -274,7 +275,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         <div style={{ maxWidth: '78%', minWidth: 0 }}>
           {isGroup && !mine ? (
             <div className="sender-name" style={isAI ? { color: 'var(--ai)', fontWeight: 700 } : undefined}>
-              {isAI ? '🤖 Jay AI' : senderName}
+              {isAI ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name="robot" size={14} strokeWidth={1.9} /> Jay AI
+                </span>
+              ) : senderName}
             </div>
           ) : null}
           <div
@@ -301,7 +306,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             {m.recalled ? (
               <span>该消息已撤回</span>
             ) : m.burned ? (
-              <span className="dim">🔥 已销毁</span>
+              <span className="dim" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Icon name="flame" size={14} filled color="#ffb020" /> 已销毁
+              </span>
             ) : m.msg_type === 'image' || m.msg_type === 'video' ? (
               <div className="bubble-media">
                 {m.one_time && !mine ? (
@@ -313,7 +320,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                       setViewer({ url: m.media_url, type: m.msg_type, messageId: m.id, oneTime: true });
                     }}
                   >
-                    <div style={{ fontSize: 30 }}>🔥</div>
+                    <Icon name="flame" size={32} filled color="#ff9d2e" />
                     <div style={{ fontSize: 12.5, fontWeight: 700 }}>一次性消息，点击查看</div>
                   </div>
                 ) : m.msg_type === 'video' ? (
@@ -328,7 +335,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
               <span>{m.content}</span>
             )}
             <div className="bubble-meta">
-              {m.one_time && !m.recalled ? <span className="one-time-tag">🔥 一次性</span> : null}
+              {m.one_time && !m.recalled ? (
+                <span className="one-time-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="flame" size={11} filled /> 一次性
+                </span>
+              ) : null}
               <span className="mono-num">{bubbleTime(m.created_at)}</span>
               {rl ? <span className={'talk-badge ' + (rl.read ? 'read' : 'unread')}>{rl.text}</span> : null}
             </div>
@@ -373,7 +384,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         {loading ? (
           <div className="empty"><Spinner size={22} /></div>
         ) : messages.length === 0 ? (
-          <Empty icon="👋" text="还没有消息，打个招呼吧" />
+          <Empty icon="message" text="还没有消息，打个招呼吧" />
         ) : (
           messages.map(renderMessage)
         )}
@@ -415,7 +426,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         <div style={{ padding: '0 12px 10px' }}>
           <div className="glass pad" style={{ padding: 8 }}>
             <div className="menu-item" style={{ border: 'none', padding: '10px 8px' }} onClick={insertMention}>
-              <span style={{ fontSize: 20 }}>🤖</span>
+              <Icon name="robot" size={20} strokeWidth={1.9} />
               <span style={{ color: 'var(--ai)', fontWeight: 700 }}>Jay AI</span>
               <span className="chev" style={{ marginLeft: 'auto' }}>智能机器人</span>
             </div>
@@ -439,25 +450,25 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         <div className="grid2" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           <MediaPicker onPick={pickFiles} accept="image/*">
             <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
-              <div style={{ fontSize: 26 }}>🖼️</div>
+              <Icon name="image" size={26} strokeWidth={1.8} />
               <div className="hint" style={{ marginTop: 6 }}>相册图片</div>
             </div>
           </MediaPicker>
           <MediaPicker onPick={pickFiles} accept="video/*">
             <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
-              <div style={{ fontSize: 26 }}>🎬</div>
+              <Icon name="video" size={26} strokeWidth={1.8} />
               <div className="hint" style={{ marginTop: 6 }}>相册视频</div>
             </div>
           </MediaPicker>
           <CameraPicker onPick={pickFiles} kind="image">
             <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
-              <div style={{ fontSize: 26 }}>📷</div>
+              <Icon name="camera" size={26} strokeWidth={1.8} />
               <div className="hint" style={{ marginTop: 6 }}>拍摄照片</div>
             </div>
           </CameraPicker>
           <CameraPicker onPick={pickFiles} kind="video">
             <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
-              <div style={{ fontSize: 26 }}>📹</div>
+              <Icon name="videoCam" size={26} strokeWidth={1.8} />
               <div className="hint" style={{ marginTop: 6 }}>拍摄视频</div>
             </div>
           </CameraPicker>
@@ -479,7 +490,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         </div>
         <div className="glass pad mt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14.5 }}>🔥 一次性查看</div>
+            <div style={{ fontWeight: 700, fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="flame" size={15} filled color="#ffb020" /> 一次性查看
+            </div>
             <div className="hint">勾选后对方只能查看一次，查看完在对方侧自动销毁（你这边保留）</div>
           </div>
           <div className={'switch' + (oneTime ? ' on' : '')} onClick={() => setOneTime((v) => !v)}><i /></div>
@@ -492,7 +505,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       {/* 在线成员 */}
       <Sheet open={onlineSheet} onClose={() => setOnlineSheet(false)} title={`在线成员（${onlineCount}）`}>
         {onlineMembers.length === 0 ? (
-          <Empty icon="🌙" text="当前没有人在线" />
+          <Empty icon="moon" text="当前没有人在线" />
         ) : (
           <div className="list">
             {onlineMembers.map((m) => (
@@ -516,11 +529,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
           onClose={() => setMenuOpen(false)}
           title={peer?.remark || peer?.username || title}
           actions={[
-            { icon: '🧑', label: '查看资料', onClick: () => push('friendInfo', { userId: peerId }) },
+            { icon: <IconTile name="user" tone="sky" box={34} size={18} />, label: '查看资料', onClick: () => push('friendInfo', { userId: peerId }) },
             peer?.is_friend === false
-              ? { icon: '➕', label: '加为好友', onClick: () => push('friendInfo', { userId: peerId }) }
-              : { icon: '🗑️', label: '删除好友', danger: true, onClick: () => setConfirmAct('delete') },
-            { icon: '🚫', label: '拉黑', danger: true, onClick: () => setConfirmAct('block') },
+              ? { icon: <IconTile name="userPlus" tone="mint" box={34} size={18} />, label: '加为好友', onClick: () => push('friendInfo', { userId: peerId }) }
+              : { icon: <IconTile name="trash" tone="rose" box={34} size={18} />, label: '删除好友', danger: true, onClick: () => setConfirmAct('delete') },
+            { icon: <IconTile name="ban" tone="rose" box={34} size={18} />, label: '拉黑', danger: true, onClick: () => setConfirmAct('block') },
           ]}
         />
       ) : null}
@@ -535,7 +548,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         }
         actions={[
           {
-            icon: confirmAct === 'block' ? '🚫' : '🗑️',
+            icon: confirmAct === 'block' ? <IconTile name="ban" tone="rose" box={34} size={18} /> : <IconTile name="trash" tone="rose" box={34} size={18} />,
             label: confirmAct === 'block' ? '确定拉黑' : '删除好友',
             danger: true,
             onClick: confirmAct === 'block' ? doBlockPeer : doDeleteFriend,
@@ -551,11 +564,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         actions={
           actionMsg
             ? [
-                ...(canRecall(actionMsg) ? [{ icon: '↩️', label: '撤回（3 分钟内）', onClick: () => doRecall(actionMsg) }] : []),
+                ...(canRecall(actionMsg) ? [{ icon: <IconTile name="reply" tone="amber" box={34} size={18} />, label: '撤回（3 分钟内）', onClick: () => doRecall(actionMsg) }] : []),
                 ...((actionMsg.msg_type === 'text' || actionMsg.msg_type === 'sticker') && !actionMsg.recalled
-                  ? [{ icon: '📋', label: '复制', onClick: () => doCopy(actionMsg) }]
+                  ? [{ icon: <IconTile name="copy" tone="sky" box={34} size={18} />, label: '复制', onClick: () => doCopy(actionMsg) }]
                   : []),
-                { icon: '🗑️', label: '删除', danger: true, onClick: () => doDeleteLocal(actionMsg) },
+                { icon: <IconTile name="trash" tone="rose" box={34} size={18} />, label: '删除', danger: true, onClick: () => doDeleteLocal(actionMsg) },
               ]
             : []
         }

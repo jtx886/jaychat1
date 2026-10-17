@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api, ws } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Empty, Loading, TopBar, toast } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import MomentCard from '../components/MomentCard.jsx';
 
 export default function MomentsScreen({ scope = 'all' }) {
@@ -65,12 +66,12 @@ export default function MomentsScreen({ scope = 'all' }) {
       />
       <div className="page-scroll">
         <div className="mx mt">
-          <button className="btn btn-primary btn-block" onClick={() => push('postMoment')}>✨ 发布动态</button>
+          <button className="btn btn-primary btn-block" onClick={() => push('postMoment')}><Icon name="sparkle" size={17} strokeWidth={1.9} /> 发布动态</button>
         </div>
         {loading ? (
           <Loading />
         ) : moments.length === 0 ? (
-          <Empty icon="🌍" text={tab === 'friends' ? '好友们还没有发布动态' : '还没有人发布动态，快来第一个吧'} />
+          <Empty icon="globe" text={tab === 'friends' ? '好友们还没有发布动态' : '还没有人发布动态，快来第一个吧'} />
         ) : (
           moments.map((m) => <MomentCard key={m.id} moment={m} onOpen={(k) => open(m, k)} onLike={like} />)
         )}

@@ -119,7 +119,7 @@ export default function ContactsScreen() {
         {loading ? (
           <Loading />
         ) : friends.length === 0 ? (
-          <Empty icon="🧑‍🤝‍🧑" text="还没有好友，点右上角 + 添加好友" />
+          <Empty icon="users" text="还没有好友，点右上角 + 添加好友" />
         ) : (
           <div className="glass mx">
             <div className="list">

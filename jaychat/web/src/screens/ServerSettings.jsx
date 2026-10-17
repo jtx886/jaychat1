@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api, getBase, setBase, isNative } from '../api.js';
 import { useApp } from '../App.jsx';
 import { TopBar, toast, Spinner } from '../components/ui.jsx';
+import { IconTile } from '../components/icons.jsx';
 
 export default function ServerSettingsScreen() {
   const { back, wsStatus } = useApp();
@@ -56,7 +57,7 @@ export default function ServerSettingsScreen() {
         <div className="glass mx mt">
           <div className="list">
             <div className="list-item">
-              <span style={{ fontSize: 19 }}>📡</span>
+              <IconTile name="server" tone="cyan" />
               <div className="list-main">
                 <div className="list-title">实时连接状态</div>
                 <div className="list-desc">{wsStatus === 'open' ? <span className="tag-online"><i />已连接</span> : <span className="dim">未连接（{wsStatus}）</span>}</div>

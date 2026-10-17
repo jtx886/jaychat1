@@ -136,6 +136,14 @@ CREATE TABLE IF NOT EXISTS dm_dnd (
   PRIMARY KEY (user_id, peer_id)
 );
 
+CREATE TABLE IF NOT EXISTS conversation_pins (
+  user_id INTEGER NOT NULL,
+  conv_type TEXT NOT NULL,
+  conv_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, conv_type, conv_id)
+);
+
 CREATE TABLE IF NOT EXISTS blocks (
   user_id INTEGER NOT NULL,
   blocked_id INTEGER NOT NULL,

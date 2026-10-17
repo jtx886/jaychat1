@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api, ws } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Empty, Loading, TopBar, toast } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import MomentCard from '../components/MomentCard.jsx';
 
 export default function UserMomentsScreen({ userId, mine }) {
@@ -81,14 +82,14 @@ export default function UserMomentsScreen({ userId, mine }) {
 
         {isSelf ? (
           <div className="mx mt">
-            <button className="btn btn-primary btn-block" onClick={() => push('postMoment')}>✨ 发布新动态</button>
+            <button className="btn btn-primary btn-block" onClick={() => push('postMoment')}><Icon name="sparkle" size={17} strokeWidth={1.9} /> 发布新动态</button>
           </div>
         ) : null}
 
         {loading ? (
           <Loading />
         ) : moments.length === 0 ? (
-          <Empty icon="📸" text={isSelf ? '你还没有发布动态' : 'TA 还没有发布动态'} />
+          <Empty icon="gallery" text={isSelf ? '你还没有发布动态' : 'TA 还没有发布动态'} />
         ) : (
           moments.map((m) => <MomentCard key={m.id} moment={m} onLike={like} onOpen={() => push('momentDetail', { momentId: m.id })} />)
         )}

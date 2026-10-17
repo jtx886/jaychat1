@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Empty, Loading, TopBar, Sheet, ActionSheet, toast, Switch, MediaPicker } from '../components/ui.jsx';
+import { IconTile } from '../components/icons.jsx';
 import { groupByInitial, fmtDuration } from '../lib/time.js';
 import { PRESET_AVATARS } from '../lib/avatar.js';
 
@@ -189,7 +190,7 @@ export default function GroupInfoScreen({ groupId }) {
         <div className="glass mx mt">
           <div className="list">
             <div className="list-item">
-              <span style={{ fontSize: 19 }}>🔕</span>
+              <IconTile name="bellOff" tone="slate" />
               <div className="list-main">
                 <div className="list-title">消息免打扰</div>
                 <div className="list-desc">开启后新消息不再弹出通知</div>
@@ -209,7 +210,7 @@ export default function GroupInfoScreen({ groupId }) {
               />
             </div>
             <div className="list-item" onClick={openInvite}>
-              <span style={{ fontSize: 19 }}>➕</span>
+              <IconTile name="userPlus" tone="mint" />
               <div className="list-main">
                 <div className="list-title">邀请好友入群</div>
                 <div className="list-desc">从好友列表选择成员加入</div>
@@ -217,7 +218,7 @@ export default function GroupInfoScreen({ groupId }) {
               <span className="chev dim">›</span>
             </div>
             <div className="list-item" onClick={() => push('chat', { convType: 'group', convId: String(group.id), title: group.name, avatar: group.avatar })}>
-              <span style={{ fontSize: 19 }}>💬</span>
+              <IconTile name="message" tone="brand" />
               <div className="list-main">
                 <div className="list-title">进入群聊</div>
               </div>
@@ -277,7 +278,7 @@ export default function GroupInfoScreen({ groupId }) {
       <Sheet open={sheet === 'editAvatar'} onClose={() => setSheet(null)} title="更换群头像">
         <div className="avatar-pick" style={{ justifyContent: 'center' }}>
           {PRESET_AVATARS.map((p) => (
-            <Avatar key={p.emoji} src={p.url} name={group.name} size={48} radius={14} onClick={() => { patchGroup({ avatar: p.url }); setSheet(null); }} style={{ cursor: 'pointer' }} />
+            <Avatar key={p.id} src={p.url} name={group.name} size={48} radius={14} onClick={() => { patchGroup({ avatar: p.url }); setSheet(null); }} style={{ cursor: 'pointer' }} />
           ))}
         </div>
         <MediaPicker
@@ -298,7 +299,7 @@ export default function GroupInfoScreen({ groupId }) {
       {/* 邀请好友 */}
       <Sheet open={sheet === 'invite'} onClose={() => setSheet(null)} title="邀请好友入群">
         {friends.length === 0 ? (
-          <Empty icon="👥" text="还没有好友可邀请" />
+          <Empty icon="users" text="还没有好友可邀请" />
         ) : (
           <div className="list">
             {friends.map((f) => (
@@ -344,16 +345,16 @@ export default function GroupInfoScreen({ groupId }) {
             ? [
                 ...(can.set_admin && target.role !== 'owner'
                   ? [target.role === 'admin'
-                    ? { icon: '🔽', label: '取消管理员', onClick: () => memberAction('unsetAdmin') }
-                    : { icon: '⭐', label: '设为管理员', onClick: () => memberAction('setAdmin') }]
+                    ? { icon: <IconTile name="chevronDown" tone="slate" box={34} size={18} />, label: '取消管理员', onClick: () => memberAction('unsetAdmin') }
+                    : { icon: <IconTile name="star" tone="amber" box={34} size={18} />, label: '设为管理员', onClick: () => memberAction('setAdmin') }]
                   : []),
                 ...(can.mute && target.role !== 'owner'
                   ? target.mute_until > Date.now()
-                    ? [{ icon: '🔊', label: `解除禁言（剩余 ${fmtDuration((target.mute_until - Date.now()) / 1000)}）`, onClick: () => memberAction('unmute') }]
-                    : [{ icon: '🔇', label: '禁言（可自定义时长）', onClick: () => memberAction('mute') }]
+                    ? [{ icon: <IconTile name="volume" tone="cyan" box={34} size={18} />, label: `解除禁言（剩余 ${fmtDuration((target.mute_until - Date.now()) / 1000)}）`, onClick: () => memberAction('unmute') }]
+                    : [{ icon: <IconTile name="volumeOff" tone="slate" box={34} size={18} />, label: '禁言（可自定义时长）', onClick: () => memberAction('mute') }]
                   : []),
-                ...(can.transfer && target.role !== 'owner' ? [{ icon: '👑', label: '转让群主', onClick: () => memberAction('transfer') }] : []),
-                ...(can.kick && target.role !== 'owner' ? [{ icon: '🚪', label: '移出群聊', danger: true, onClick: () => memberAction('kick') }] : []),
+                ...(can.transfer && target.role !== 'owner' ? [{ icon: <IconTile name="crown" tone="amber" box={34} size={18} />, label: '转让群主', onClick: () => memberAction('transfer') }] : []),
+                ...(can.kick && target.role !== 'owner' ? [{ icon: <IconTile name="logout" tone="rose" box={34} size={18} />, label: '移出群聊', danger: true, onClick: () => memberAction('kick') }] : []),
               ]
             : []
         }

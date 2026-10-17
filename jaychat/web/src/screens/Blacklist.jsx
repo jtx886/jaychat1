@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Empty, Loading, TopBar, ActionSheet, toast } from '../components/ui.jsx';
+import { IconTile } from '../components/icons.jsx';
 import { fromNow } from '../lib/time.js';
 
 /** 黑名单：查看已拉黑用户并解除拉黑 */
@@ -50,7 +51,7 @@ export default function BlacklistScreen() {
         {loading ? (
           <Loading />
         ) : list.length === 0 ? (
-          <Empty icon="🛡️" text="黑名单为空，被你拉黑的用户会显示在这里" />
+          <Empty icon="shield" text="黑名单为空，被你拉黑的用户会显示在这里" />
         ) : (
           <div className="glass mx mt" style={{ marginTop: 8 }}>
             <div className="list">
@@ -80,7 +81,7 @@ export default function BlacklistScreen() {
         open={!!target}
         onClose={() => setTarget(null)}
         title={`解除拉黑「${target?.username || ''}」？`}
-        actions={[{ icon: '✅', label: '解除拉黑', onClick: unblock }]}
+        actions={[{ icon: <IconTile name="checkCircle" tone="mint" box={34} size={18} />, label: '解除拉黑', onClick: unblock }]}
       />
     </div>
   );

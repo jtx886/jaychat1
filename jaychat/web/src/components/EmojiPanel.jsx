@@ -1,32 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { EMOJI_CATEGORIES, STICKER_PACKS, ANIM_CLASS, encodeSticker, parseSticker, fetchRemoteStickers } from '../lib/emoji.js';
+import React, { useState } from 'react';
+import { EMOJI_CATEGORIES, STICKER_PACKS, encodeSticker, parseSticker } from '../lib/emoji.js';
+import { Icon } from './icons.jsx';
+import { TgsSticker, hasArt } from './Sticker.jsx';
 
-/** 渲染贴纸（聊天消息里使用） */
+/** 渲染聊天消息里的贴纸 */
 export function StickerView({ text, small }) {
   const s = parseSticker(text);
   if (!s) return null;
-  return (
-    <span className={'sticker-view' + (small ? ' sm' : '') + ' ' + (ANIM_CLASS[s.anim] || 'anim-jelly')}>
-      {s.emoji}
-    </span>
-  );
+  if (s.art && hasArt(s.art)) return <TgsSticker art={s.art} size={small ? 'md' : 'lg'} />;
+  if (s.emoji) {
+    return <span style={{ fontSize: small ? 34 : 56, lineHeight: 1.1 }}>{s.emoji}</span>;
+  }
+  return null;
 }
 
 export default function EmojiPanel({ onEmoji, onSticker }) {
   const [tab, setTab] = useState('normal'); // normal | anim
   const [cat, setCat] = useState(EMOJI_CATEGORIES[0].key);
   const [pack, setPack] = useState(STICKER_PACKS[0].key);
-  const [remote, setRemote] = useState([]);
-
-  useEffect(() => {
-    let alive = true;
-    fetchRemoteStickers().then((list) => {
-      if (alive) setRemote(list);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const current = EMOJI_CATEGORIES.find((c) => c.key === cat) || EMOJI_CATEGORIES[0];
   const currentPack = STICKER_PACKS.find((p) => p.key === pack) || STICKER_PACKS[0];
@@ -35,10 +26,10 @@ export default function EmojiPanel({ onEmoji, onSticker }) {
     <div className="emoji-panel">
       <div className="emoji-tabs">
         <div className={'emoji-tab' + (tab === 'normal' ? ' active' : '')} onClick={() => setTab('normal')}>
-          😀 普通表情
+          <Icon name="smile" size={15} strokeWidth={1.9} /> 普通表情
         </div>
         <div className={'emoji-tab' + (tab === 'anim' ? ' active' : '')} onClick={() => setTab('anim')}>
-          🎬 动画表情包
+          <Icon name="sparkle" size={15} strokeWidth={1.9} /> 动画表情包
         </div>
       </div>
 
@@ -52,7 +43,7 @@ export default function EmojiPanel({ onEmoji, onSticker }) {
                 onClick={() => setCat(c.key)}
                 style={{ flex: '0 0 auto', padding: '6px 11px' }}
               >
-                {c.icon} {c.name}
+                <Icon name={c.icon} size={14} strokeWidth={1.9} /> {c.name}
               </div>
             ))}
           </div>
@@ -74,27 +65,14 @@ export default function EmojiPanel({ onEmoji, onSticker }) {
                 onClick={() => setPack(p.key)}
                 style={{ flex: '0 0 auto', padding: '6px 11px' }}
               >
-                {p.icon} {p.name}
+                <Icon name={p.icon} size={14} strokeWidth={1.9} /> {p.name}
               </div>
             ))}
           </div>
           <div className="emoji-grid anim">
             {currentPack.items.map((s) => (
               <button key={s.id} className="sticker-cell" onClick={() => onSticker(encodeSticker(s))} title={s.label}>
-                <span className={'sticker-view sm ' + (ANIM_CLASS[s.anim] || 'anim-jelly')} style={{ display: 'block', textAlign: 'center' }}>
-                  {s.emoji}
-                </span>
-              </button>
-            ))}
-            {remote.map((s) => (
-              <button key={s.id} className="sticker-cell" onClick={() => onSticker(`stu|${s.anim}|${s.emoji || '✨'}`)}>
-                {s.url ? (
-                  <img src={s.url} alt={s.label} />
-                ) : (
-                  <span className={'sticker-view sm ' + (ANIM_CLASS[s.anim] || 'anim-jelly')} style={{ display: 'block', textAlign: 'center' }}>
-                    {s.emoji}
-                  </span>
-                )}
+                <TgsSticker art={s.art} size="fill" />
               </button>
             ))}
           </div>

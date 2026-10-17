@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api, ws } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, ActionSheet, Empty, Loading, TopBar, toast } from '../components/ui.jsx';
+import { IconTile } from '../components/icons.jsx';
 import { fullTime } from '../lib/time.js';
 import MomentCard from '../components/MomentCard.jsx';
 
@@ -128,7 +129,7 @@ export default function MomentDetailScreen({ momentId }) {
               </div>
             ))
           ) : (
-            <Empty icon="💬" text="还没有评论，来说点什么吧" />
+            <Empty icon="message" text="还没有评论，来说点什么吧" />
           )}
         </div>
         <div style={{ height: 12 }} />
@@ -160,9 +161,9 @@ export default function MomentDetailScreen({ momentId }) {
         actions={
           actionComment
             ? [
-                { icon: '↩️', label: '回复', onClick: () => { setReplyTo({ user: actionComment.user }); setTimeout(() => inputRef.current?.focus(), 50); } },
-                ...(canDeleteComment(actionComment) ? [{ icon: '🗑️', label: '删除评论', danger: true, onClick: () => deleteComment(actionComment) }] : []),
-                ...(actionComment.user?.id !== me.id && moment.author?.id !== me.id ? [{ icon: '👤', label: '查看 TA 的动态', onClick: () => push('userMoments', { userId: actionComment.user?.id }) }] : []),
+                { icon: <IconTile name="reply" tone="amber" box={34} size={18} />, label: '回复', onClick: () => { setReplyTo({ user: actionComment.user }); setTimeout(() => inputRef.current?.focus(), 50); } },
+                ...(canDeleteComment(actionComment) ? [{ icon: <IconTile name="trash" tone="rose" box={34} size={18} />, label: '删除评论', danger: true, onClick: () => deleteComment(actionComment) }] : []),
+                ...(actionComment.user?.id !== me.id && moment.author?.id !== me.id ? [{ icon: <IconTile name="user" tone="sky" box={34} size={18} />, label: '查看 TA 的动态', onClick: () => push('userMoments', { userId: actionComment.user?.id }) }] : []),
               ]
             : []
         }

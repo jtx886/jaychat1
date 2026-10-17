@@ -90,7 +90,7 @@ export default function EditProfileScreen({ focus = 'avatar' }) {
             <div className="avatar-pick">
               {PRESET_AVATARS.map((p) => (
                 <div
-                  key={p.emoji}
+                  key={p.id}
                   className={'opt' + (avatar === p.url ? ' sel' : '')}
                   onClick={() => saveAvatar(p.url)}
                   style={{ backgroundImage: `url("${p.url}")`, backgroundSize: 'cover' }}
