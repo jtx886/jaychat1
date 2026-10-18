@@ -21,10 +21,13 @@ ENV NODE_ENV=production \
 
 EXPOSE 3000
 
-# 必须挂载持久存储，否则容器重建（重新部署 / 缩容到 0 后唤醒 / 重启）会清空数据：
-#   /app/data           → SQLite 数据库 jaychat.db（用户 / 好友 / 群 / 消息 / 动态）
-#   /app/public/uploads → 上传的图片与视频
-# CloudBase 云托管请在控制台「存储挂载 / 文件存储(CFS)」把持久卷挂到以上两个路径
+# 数据持久化（容器本地磁盘是临时的，重新部署 / 缩容到 0 唤醒 / 重启都会清空）：
+# 方案 A（推荐，免付费）：配置腾讯云对象存储 COS 环境变量
+#   COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION
+#   → 上传媒体直接存 COS；SQLite 数据库定时快照到 COS，容器启动时自动恢复
+# 方案 B：把持久卷挂到下面两个路径（CloudBase 需开通「私有网络 + 存储挂载 CFS」，属付费能力）
+#   /app/data           → SQLite 数据库 jaychat.db
+#   /app/public/uploads → 上传的图片与视频（未配置 COS 时的本地兜底）
 VOLUME ["/app/data", "/app/public/uploads"]
 
-CMD ["node", "src/index.js"]
+CMD ["node", "src/boot.js"]
