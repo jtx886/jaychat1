@@ -6,6 +6,9 @@ const LS_USER = 'jc_user';
 export const isNative = () => typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
 export const isAndroid = () => isNative() && window.Capacitor?.getPlatform?.() === 'android';
 
+/** 轮询间隔（毫秒）：后端不支持 WebSocket 时自动降级为 HTTP 轮询 */
+const POLL_MS = Number(import.meta.env.VITE_POLL_INTERVAL || 3000);
+
 /** App 内置默认服务器地址（打包进 APK，免手填） */
 const BUILTIN_BASE = 'https://jaychat-330497-11-1391073131.sh.run.tcloudbase.com';
 
@@ -108,6 +111,8 @@ class Realtime {
     this.retry = 0;
     this.queue = [];
     this.status = 'idle';
+    this.mode = 'ws'; // ws | poll
+    this.cursor = 0;
   }
   on(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -126,6 +131,7 @@ class Realtime {
   connect() {
     const token = tokenStore.get();
     if (!token) return;
+    if (this.mode === 'poll') return this.startPoll();
     const base = getBase();
     const url = (base || window.location.origin).replace(/^http/, 'ws') + '/ws?token=' + encodeURIComponent(token);
     this.close();
@@ -158,19 +164,60 @@ class Realtime {
     };
     this.ws.onerror = () => {};
   }
+  /** 探测后端是否提供 /api/poll（PHP 版后端没有 WebSocket，用它判断能否降级） */
+  async probePoll() {
+    try {
+      const d = await http('/api/poll', { timeout: 8000 });
+      return !!(d && typeof d.cursor === 'number');
+    } catch {
+      return false;
+    }
+  }
+  startPoll() {
+    this.mode = 'poll';
+    this.status = 'open';
+    this.emit('__status', 'open');
+    this.pollOnce();
+  }
+  async pollOnce() {
+    if (this.mode !== 'poll' || !tokenStore.get()) return;
+    try {
+      const d = await http('/api/poll' + (this.cursor ? '?since=' + this.cursor : ''), { timeout: 20000 });
+      if (typeof d?.cursor === 'number') this.cursor = d.cursor;
+      (d?.events || []).forEach((e) => {
+        if (!e || !e.type) return;
+        this.emit(e.type, e.data);
+        this.emit('__any', e);
+      });
+    } catch {}
+    if (this.mode !== 'poll' || !tokenStore.get()) return;
+    this.timer = setTimeout(() => this.pollOnce(), POLL_MS);
+  }
   scheduleRetry() {
     if (this.timer) return;
     this.retry = Math.min(this.retry + 1, 8);
-    this.timer = setTimeout(() => {
+    const delay = Math.min(1000 * this.retry, 6000);
+    this.timer = setTimeout(async () => {
       this.timer = null;
-      if (tokenStore.get()) this.connect();
-    }, Math.min(1000 * this.retry, 6000));
+      if (!tokenStore.get()) return;
+      // WebSocket 连不上（如 PHP 主机）且后端提供轮询接口 → 永久降级为轮询
+      if (this.retry >= 2 && this.mode === 'ws' && (await this.probePoll())) {
+        this.retry = 0;
+        return this.startPoll();
+      }
+      this.connect();
+    }, delay);
   }
   send(obj) {
+    if (this.mode === 'poll') return;
     if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(obj));
     else this.queue.push(obj);
   }
   typing(convType, convId) {
+    if (this.mode === 'poll') {
+      http('/api/typing', { method: 'POST', body: { convType, convId } }).catch(() => {});
+      return;
+    }
     this.send({ type: 'typing', convType, convId });
   }
   close() {

@@ -1,0 +1,7 @@
+# 上传目录：禁止执行任何脚本，防止上传可执行文件被访问
+<FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh|shtml|htaccess)$">
+  Require all denied
+</FilesMatch>
+
+# 禁止目录列出
+Options -Indexes

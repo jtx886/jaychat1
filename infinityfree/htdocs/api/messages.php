@@ -1,0 +1,565 @@
+<?php
+/**
+ * /api/conversations  /api/messages  /api/upload  /api/dm-dnd
+ */
+
+const JC_RECALL_WINDOW = 180000; // 3 分钟
+
+function last_message($conv_type, $conv_id)
+{
+    return db_one(
+        'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `recalled` = 0 ORDER BY `id` DESC LIMIT 1',
+        array($conv_type, (string) $conv_id)
+    );
+}
+
+function is_burned($message_id, $uid)
+{
+    return db_one('SELECT 1 FROM `message_burns` WHERE `message_id` = ? AND `user_id` = ?', array((int) $message_id, (int) $uid)) !== null;
+}
+
+function unread_count($conv_type, $conv_id, $uid)
+{
+    $rows = db_all(
+        'SELECT `id`, `one_time` FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `sender_id` != ? AND `recalled` = 0
+         AND `id` NOT IN (SELECT `message_id` FROM `message_reads` WHERE `user_id` = ?)',
+        array($conv_type, (string) $conv_id, (int) $uid, (int) $uid)
+    );
+    $n = 0;
+    foreach ($rows as $r) {
+        if (!empty($r['one_time']) && is_burned((int) $r['id'], $uid)) {
+            continue;
+        }
+        $n++;
+    }
+    return $n;
+}
+
+function preview_of($m)
+{
+    $text = isset($m['content']) ? (string) $m['content'] : '';
+    if ($m['msg_type'] === 'image') {
+        $text = '[图片]';
+    } elseif ($m['msg_type'] === 'video') {
+        $text = '[视频]';
+    } elseif ($m['msg_type'] === 'sticker') {
+        $text = '[动画表情]';
+    }
+    if (!empty($m['one_time'])) {
+        $text = '[一次性消息]';
+    }
+    if ((int) $m['sender_id'] === 0) {
+        $sender = 'Jay AI';
+    } else {
+        $pu = public_user(get_user($m['sender_id']));
+        $sender = $pu ? $pu['username'] : '';
+    }
+    return array(
+        'text' => $text,
+        'sender' => $sender,
+        'msg_type' => (string) $m['msg_type'],
+        'one_time' => !empty($m['one_time']),
+        'created_at' => (int) $m['created_at'],
+    );
+}
+
+/** 是否有权访问该会话（等价 checkAccess） */
+function check_access($uid, $conv_type, $conv_id)
+{
+    if ($conv_type === 'group') {
+        return (bool) member_role((int) $conv_id, $uid);
+    }
+    $parts = array_map('intval', explode('_', (string) $conv_id));
+    if (!in_array((int) $uid, $parts, true)) {
+        return false;
+    }
+    $peer = null;
+    foreach ($parts as $x) {
+        if ($x !== (int) $uid) {
+            $peer = $x;
+            break;
+        }
+    }
+    if ($peer === null) {
+        return false;
+    }
+    $peerU = get_user($peer);
+    return are_friends($uid, $peer) || ($peerU && !empty($peerU['is_official']));
+}
+
+function mark_read_bulk($uid, $ids, $conv_type, $conv_id)
+{
+    if (empty($ids)) {
+        return;
+    }
+    foreach ($ids as $id) {
+        db_exec_ignore('INSERT INTO `message_reads` (`message_id`, `user_id`, `read_at`) VALUES (?, ?, ?)', array((int) $id, (int) $uid, now_ms()));
+    }
+    $counts = new stdClass();
+    foreach ($ids as $id) {
+        $c = (int) db_value('SELECT COUNT(*) FROM `message_reads` WHERE `message_id` = ?', array((int) $id));
+        $counts->{(string) (int) $id} = $c;
+    }
+    $payload = array(
+        'convType' => $conv_type,
+        'convId' => (string) $conv_id,
+        'readerId' => (int) $uid,
+        'messageIds' => array_map('intval', $ids),
+        'counts' => $counts,
+        'readAt' => now_ms(),
+    );
+    event_to_conversation($conv_type, $conv_id, 'message:read', $payload);
+}
+
+/* ------------------------------- 媒体上传 ------------------------------- */
+
+const JC_VIDEO_EXT = array('.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv', '.3gp', '.flv', '.wmv', '.mpeg', '.mpg');
+
+route('POST', '#^/api/upload$#', function ($params, $body) {
+    require_auth();
+
+    if (!isset($_FILES['file'])) {
+        return array(400, array('error' => '未收到文件'));
+    }
+    $f = $_FILES['file'];
+    $err = isset($f['error']) ? (int) $f['error'] : UPLOAD_ERR_NO_FILE;
+    if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) {
+        return array(400, array('error' => '文件过大，当前部署最多支持 10MB'));
+    }
+    if ($err !== UPLOAD_ERR_OK) {
+        return array(400, array('error' => '上传失败'));
+    }
+    if (!isset($f['tmp_name']) || $f['tmp_name'] === '') {
+        return array(400, array('error' => '未收到文件'));
+    }
+    if (!is_uploaded_file($f['tmp_name'])) {
+        return array(400, array('error' => '上传失败'));
+    }
+
+    $maxBytes = (int) jc_config('UPLOAD_MAX_BYTES');
+    $size = (int) $f['size'];
+    if ($size > $maxBytes) {
+        return array(400, array('error' => '文件过大，当前部署最多支持 10MB'));
+    }
+
+    $original = isset($f['name']) ? (string) $f['name'] : '';
+    $ext = strtolower((string) pathinfo($original, PATHINFO_EXTENSION));
+    $ext = $ext !== '' ? ('.' . substr($ext, 0, 10)) : '.bin';
+
+    $mime = isset($f['type']) ? (string) $f['type'] : '';
+    $isVideo = (strpos($mime, 'video') === 0) || in_array($ext, JC_VIDEO_EXT, true);
+    $kind = $isVideo ? 'video' : 'image';
+
+    $sub = date('Ym');
+    $dir = JC_HTDOCS . '/uploads/' . $sub;
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0777, true);
+    }
+    $filename = now_ms() . '_' . bin2hex(random_bytes(6)) . $ext;
+    $dest = $dir . '/' . $filename;
+    if (!@move_uploaded_file($f['tmp_name'], $dest)) {
+        return array(400, array('error' => '上传失败'));
+    }
+
+    return array(200, array(
+        'url' => '/uploads/' . $sub . '/' . $filename,
+        'thumb' => '',
+        'kind' => $kind,
+        'size' => $size,
+        'mime' => $mime,
+    ));
+});
+
+/* ------------------------------- 会话列表 ------------------------------- */
+
+route('GET', '#^/api/conversations$#', function ($params, $body) {
+    $uid = require_auth();
+    $blocked = array();
+    foreach (blocked_ids($uid) as $b) {
+        $blocked[(int) $b] = true;
+    }
+
+    $pinnedRows = db_all('SELECT `conv_type`, `conv_id`, `created_at` FROM `conversation_pins` WHERE `user_id` = ?', array($uid));
+    $pinnedMap = array();
+    foreach ($pinnedRows as $r) {
+        $pinnedMap[$r['conv_type'] . '_' . $r['conv_id']] = (int) $r['created_at'];
+    }
+    $pinnedAt = function ($ct, $ci) use ($pinnedMap) {
+        $k = $ct . '_' . $ci;
+        return isset($pinnedMap[$k]) ? $pinnedMap[$k] : 0;
+    };
+
+    $list = array();
+
+    // 群聊
+    $groups = db_all('SELECT g.*, m.`dnd` FROM `group_members` m JOIN `groups` g ON g.`id` = m.`group_id` WHERE m.`user_id` = ?', array($uid));
+    foreach ($groups as $g) {
+        $cid = (string) $g['id'];
+        $lm = last_message('group', $cid);
+        $members = group_members($g['id']);
+        $online = 0;
+        foreach ($members as $m) {
+            if (is_online((int) $m['user_id'])) {
+                $online++;
+            }
+        }
+        $lastTime = $lm ? (int) $lm['created_at'] : (int) $g['created_at'];
+        $list[] = array(
+            'key' => 'group_' . $cid,
+            'conv_type' => 'group',
+            'conv_id' => $cid,
+            'name' => (string) $g['name'],
+            'avatar' => isset($g['avatar']) ? (string) $g['avatar'] : '',
+            'is_official' => !empty($g['is_official']),
+            'dnd' => !empty($g['dnd']),
+            'member_count' => count($members),
+            'online_count' => $online,
+            'unread' => unread_count('group', $cid, $uid),
+            'last' => $lm ? preview_of($lm) : null,
+            'last_time' => $lastTime,
+            'sort_time' => $lastTime,
+            'pinned' => $pinnedAt('group', $cid),
+        );
+    }
+
+    // 私聊（好友）
+    $friends = db_all('SELECT u.*, f.`remark` FROM `friendships` f JOIN `users` u ON u.`id` = f.`friend_id` WHERE f.`user_id` = ?', array($uid));
+    $seen = array();
+    foreach ($friends as $f) {
+        if (isset($blocked[(int) $f['id']])) {
+            continue;
+        }
+        $cid = dm_conv_id($uid, $f['id']);
+        $seen[$cid] = true;
+        $lm = last_message('dm', $cid);
+        $dndRow = db_one('SELECT `dnd` FROM `dm_dnd` WHERE `user_id` = ? AND `peer_id` = ?', array($uid, (int) $f['id']));
+        $list[] = array(
+            'key' => 'dm_' . $cid,
+            'conv_type' => 'dm',
+            'conv_id' => $cid,
+            'name' => (isset($f['remark']) && $f['remark']) ? $f['remark'] : (string) $f['username'],
+            'avatar' => isset($f['avatar']) ? (string) $f['avatar'] : '',
+            'is_official' => !empty($f['is_official']),
+            'peer' => public_user($f),
+            'online' => is_online((int) $f['id']),
+            'dnd' => ($dndRow && !empty($dndRow['dnd'])),
+            'unread' => unread_count('dm', $cid, $uid),
+            'last' => $lm ? preview_of($lm) : null,
+            'last_time' => $lm ? (int) $lm['created_at'] : 0,
+            'sort_time' => $lm ? (int) $lm['created_at'] : 0,
+            'pinned' => $pinnedAt('dm', $cid),
+        );
+    }
+
+    // 历史私聊但已非好友
+    $dmRows = db_all(
+        "SELECT DISTINCT `conv_id` FROM `messages` WHERE `conv_type` = 'dm' AND (`conv_id` LIKE ? OR `conv_id` LIKE ?)",
+        array('%_' . $uid, $uid . '_%')
+    );
+    foreach ($dmRows as $r) {
+        $convId = $r['conv_id'];
+        if (isset($seen[$convId])) {
+            continue;
+        }
+        $parts = explode('_', $convId);
+        $peerId = 0;
+        foreach ($parts as $x) {
+            if ((int) $x !== (int) $uid) {
+                $peerId = (int) $x;
+                break;
+            }
+        }
+        if (isset($blocked[$peerId])) {
+            continue;
+        }
+        $peer = get_user($peerId);
+        if (!$peer) {
+            continue;
+        }
+        $lm = last_message('dm', $convId);
+        $list[] = array(
+            'key' => 'dm_' . $convId,
+            'conv_type' => 'dm',
+            'conv_id' => (string) $convId,
+            'name' => (string) $peer['username'],
+            'avatar' => isset($peer['avatar']) ? (string) $peer['avatar'] : '',
+            'peer' => public_user($peer),
+            'online' => is_online($peerId),
+            'dnd' => false,
+            'unread' => unread_count('dm', $convId, $uid),
+            'last' => $lm ? preview_of($lm) : null,
+            'last_time' => $lm ? (int) $lm['created_at'] : 0,
+            'sort_time' => $lm ? (int) $lm['created_at'] : 0,
+            'pinned' => $pinnedAt('dm', $convId),
+        );
+    }
+
+    usort($list, function ($a, $b) {
+        if ($a['pinned'] !== $b['pinned']) {
+            return $b['pinned'] - $a['pinned'];
+        }
+        return $b['sort_time'] - $a['sort_time'];
+    });
+
+    $totalUnread = 0;
+    foreach ($list as $c) {
+        $totalUnread += (int) $c['unread'];
+    }
+
+    $grp = db_one('SELECT `id` FROM `groups` WHERE `is_official` = 1');
+    return array(200, array(
+        'conversations' => $list,
+        'total_unread' => $totalUnread,
+        'official_group_id' => $grp ? (int) $grp['id'] : 0,
+    ));
+});
+
+/* ------------------------------- 会话置顶 ------------------------------- */
+
+route('PATCH', '#^/api/conversations/pin$#', function ($params, $body) {
+    $uid = require_auth();
+    $convType = isset($body['convType']) ? (string) $body['convType'] : '';
+    $convId = isset($body['convId']) ? (string) $body['convId'] : '';
+    $pinned = !empty($body['pinned']) ? 1 : 0;
+    if (($convType !== 'dm' && $convType !== 'group') || $convId === '') {
+        return array(400, array('error' => '参数不合法'));
+    }
+    if (!check_access($uid, $convType, $convId)) {
+        return array(403, array('error' => '无权操作该会话'));
+    }
+    if ($pinned) {
+        $ex = db_one('SELECT 1 FROM `conversation_pins` WHERE `user_id` = ? AND `conv_type` = ? AND `conv_id` = ?', array($uid, $convType, $convId));
+        if ($ex) {
+            db_run('UPDATE `conversation_pins` SET `created_at` = ? WHERE `user_id` = ? AND `conv_type` = ? AND `conv_id` = ?', array(now_ms(), $uid, $convType, $convId));
+        } else {
+            db_run('INSERT INTO `conversation_pins` (`user_id`, `conv_type`, `conv_id`, `created_at`) VALUES (?, ?, ?, ?)', array($uid, $convType, $convId, now_ms()));
+        }
+    } else {
+        db_run('DELETE FROM `conversation_pins` WHERE `user_id` = ? AND `conv_type` = ? AND `conv_id` = ?', array($uid, $convType, $convId));
+    }
+    return array(200, array('ok' => true, 'pinned' => (bool) $pinned));
+});
+
+/* ------------------------------- 消息历史 ------------------------------- */
+
+route('GET', '#^/api/messages$#', function ($params, $body) {
+    $uid = require_auth();
+    $convType = isset($_GET['convType']) ? (string) $_GET['convType'] : 'dm';
+    $convId = isset($_GET['convId']) ? (string) $_GET['convId'] : '';
+    if ($convId === '') {
+        return array(400, array('error' => '缺少会话 ID'));
+    }
+    if (!check_access($uid, $convType, $convId)) {
+        return array(403, array('error' => '无权访问该会话'));
+    }
+    $before = isset($_GET['before']) ? (int) $_GET['before'] : 0;
+    $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 60;
+    if ($limit > 200) {
+        $limit = 200;
+    }
+    if ($limit < 1) {
+        $limit = 1;
+    }
+    if ($before) {
+        $rows = db_all(
+            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `id` < ? ORDER BY `id` DESC LIMIT ' . (int) $limit,
+            array($convType, $convId, $before)
+        );
+    } else {
+        $rows = db_all(
+            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? ORDER BY `id` DESC LIMIT ' . (int) $limit,
+            array($convType, $convId)
+        );
+    }
+    $rows = array_reverse($rows);
+
+    $list = array();
+    $readIds = array();
+    foreach ($rows as $m) {
+        if (!empty($m['one_time']) && (int) $m['sender_id'] !== (int) $uid && is_burned((int) $m['id'], $uid)) {
+            continue;
+        }
+        $list[] = build_message($m);
+        if ((int) $m['sender_id'] !== (int) $uid) {
+            $readIds[] = (int) $m['id'];
+        }
+    }
+    $markRead = isset($_GET['markRead']) ? (string) $_GET['markRead'] : 'true';
+    if ($markRead !== 'false') {
+        mark_read_bulk($uid, $readIds, $convType, $convId);
+    }
+    return array(200, array('messages' => $list, 'has_more' => count($rows) >= $limit));
+});
+
+/* ------------------------------- 发送消息 ------------------------------- */
+
+route('POST', '#^/api/messages$#', function ($params, $body) {
+    $uid = require_auth();
+    $convType = isset($body['convType']) ? $body['convType'] : null;
+    $convId = isset($body['convId']) ? $body['convId'] : null;
+    $msgType = isset($body['msg_type']) && $body['msg_type'] !== '' ? $body['msg_type'] : 'text';
+    $content = isset($body['content']) ? $body['content'] : '';
+    $mediaUrl = isset($body['media_url']) ? $body['media_url'] : '';
+    $mediaThumb = isset($body['media_thumb']) ? $body['media_thumb'] : '';
+    $oneTime = !empty($body['one_time']);
+    $burnSec = isset($body['burn_sec']) ? $body['burn_sec'] : 0;
+    $clientId = isset($body['clientId']) ? $body['clientId'] : null;
+
+    if ($convType === 'dm') {
+        $peer = 0;
+        foreach (explode('_', (string) $convId) as $x) {
+            if ((int) $x !== (int) $uid) {
+                $peer = (int) $x;
+                break;
+            }
+        }
+        if (blocked_either($uid, $peer)) {
+            return array(403, array('error' => '你与对方已互相拉黑，无法发送消息'));
+        }
+    }
+    if (!check_access($uid, $convType, $convId)) {
+        return array(403, array('error' => '无权在该会话发送消息'));
+    }
+
+    if ($convType === 'group') {
+        $gid = (int) $convId;
+        $me = db_one('SELECT `mute_until` FROM `group_members` WHERE `group_id` = ? AND `user_id` = ?', array($gid, $uid));
+        if ($me && (int) $me['mute_until'] && (int) $me['mute_until'] > now_ms()) {
+            return array(403, array('error' => '你已被禁言，剩余 ' . (int) ceil(((int) $me['mute_until'] - now_ms()) / 1000) . ' 秒'));
+        }
+    }
+
+    if ($msgType === 'text' && trim((string) $content) === '') {
+        return array(400, array('error' => '消息不能为空'));
+    }
+    if ($msgType === 'sticker' && trim((string) $content) === '') {
+        return array(400, array('error' => '表情不能为空'));
+    }
+    if ($msgType !== 'text' && $msgType !== 'sticker' && !$mediaUrl) {
+        return array(400, array('error' => '缺少媒体文件'));
+    }
+
+    $burn = 5;
+    if ($oneTime) {
+        $b = (int) $burnSec;
+        if ($b < 1) {
+            $b = 5;
+        }
+        if ($b > 300) {
+            $b = 300;
+        }
+        $burn = $b;
+    }
+    $id = db_insert(
+        'INSERT INTO `messages` (`conv_type`, `conv_id`, `sender_id`, `msg_type`, `content`, `media_url`, `media_thumb`, `one_time`, `burn_sec`, `recalled`, `extra`, `created_at`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)',
+        array(
+            (string) $convType,
+            (string) $convId,
+            $uid,
+            (string) $msgType,
+            mb_substr((string) $content, 0, 2000, 'UTF-8'),
+            (string) $mediaUrl,
+            (string) $mediaThumb,
+            $oneTime ? 1 : 0,
+            $burn,
+            '',
+            now_ms(),
+        )
+    );
+    $row = db_one('SELECT * FROM `messages` WHERE `id` = ?', array($id));
+    db_exec_ignore('INSERT INTO `message_reads` (`message_id`, `user_id`, `read_at`) VALUES (?, ?, ?)', array($id, $uid, now_ms()));
+
+    $extraIn = ($clientId !== null && $clientId !== '') ? array('client_id' => $clientId) : array();
+    $msg = build_message($row, $extraIn);
+    event_to_conversation($convType, $convId, 'message', $msg);
+    return array(200, array('message' => $msg));
+});
+
+/* ------------------------------- 已读回执 ------------------------------- */
+
+route('POST', '#^/api/messages/(\d+)/read$#', function ($params, $body) {
+    $uid = require_auth();
+    $id = (int) $params[0];
+    $m = db_one('SELECT * FROM `messages` WHERE `id` = ?', array($id));
+    if (!$m) {
+        return array(404, array('error' => '消息不存在'));
+    }
+    if (!check_access($uid, $m['conv_type'], $m['conv_id'])) {
+        return array(403, array('error' => '无权操作'));
+    }
+    mark_read_bulk($uid, array($id), $m['conv_type'], $m['conv_id']);
+    $c = (int) db_value('SELECT COUNT(*) FROM `message_reads` WHERE `message_id` = ?', array($id));
+    return array(200, array('ok' => true, 'read_count' => $c));
+});
+
+/* -------------------------------- 撤回 -------------------------------- */
+
+route('POST', '#^/api/messages/(\d+)/recall$#', function ($params, $body) {
+    $uid = require_auth();
+    $id = (int) $params[0];
+    $m = db_one('SELECT * FROM `messages` WHERE `id` = ?', array($id));
+    if (!$m) {
+        return array(404, array('error' => '消息不存在'));
+    }
+    if ((int) $m['sender_id'] !== (int) $uid) {
+        return array(403, array('error' => '只能撤回自己发送的消息'));
+    }
+    if (now_ms() - (int) $m['created_at'] > JC_RECALL_WINDOW) {
+        return array(400, array('error' => '超过 3 分钟的消息不能撤回'));
+    }
+    db_run('UPDATE `messages` SET `recalled` = 1, `content` = ?, `media_url` = ?, `media_thumb` = ? WHERE `id` = ?', array('', '', '', $id));
+    event_to_conversation($m['conv_type'], $m['conv_id'], 'message:recall', array(
+        'id' => $id,
+        'convType' => (string) $m['conv_type'],
+        'convId' => (string) $m['conv_id'],
+        'senderId' => (int) $m['sender_id'],
+    ));
+    return array(200, array('ok' => true));
+});
+
+/* ---------------------------- 一次性查看销毁 ---------------------------- */
+
+route('POST', '#^/api/messages/(\d+)/burn$#', function ($params, $body) {
+    $uid = require_auth();
+    $id = (int) $params[0];
+    $m = db_one('SELECT * FROM `messages` WHERE `id` = ?', array($id));
+    if (!$m) {
+        return array(404, array('error' => '消息不存在'));
+    }
+    if (empty($m['one_time'])) {
+        return array(400, array('error' => '该消息不是一次性消息'));
+    }
+    if ((int) $m['sender_id'] === (int) $uid) {
+        return array(400, array('error' => '发送者不会销毁'));
+    }
+    if (!check_access($uid, $m['conv_type'], $m['conv_id'])) {
+        return array(403, array('error' => '无权操作'));
+    }
+    db_exec_ignore('INSERT INTO `message_burns` (`message_id`, `user_id`, `burned_at`) VALUES (?, ?, ?)', array($id, $uid, now_ms()));
+    event_to_conversation($m['conv_type'], $m['conv_id'], 'message:burn', array(
+        'id' => $id,
+        'userId' => $uid,
+        'convType' => (string) $m['conv_type'],
+        'convId' => (string) $m['conv_id'],
+    ));
+    return array(200, array('ok' => true));
+});
+
+/* ---------------------------- 私聊免打扰 ---------------------------- */
+
+route('PATCH', '#^/api/dm-dnd$#', function ($params, $body) {
+    $uid = require_auth();
+    $peer = isset($body['peerId']) ? (int) $body['peerId'] : 0;
+    if (!$peer) {
+        return array(400, array('error' => '参数错误'));
+    }
+    $dnd = !empty($body['dnd']) ? 1 : 0;
+    $ex = db_one('SELECT 1 FROM `dm_dnd` WHERE `user_id` = ? AND `peer_id` = ?', array($uid, $peer));
+    if ($ex) {
+        db_run('UPDATE `dm_dnd` SET `dnd` = ? WHERE `user_id` = ? AND `peer_id` = ?', array($dnd, $uid, $peer));
+    } else {
+        db_run('INSERT INTO `dm_dnd` (`user_id`, `peer_id`, `dnd`) VALUES (?, ?, ?)', array($uid, $peer, $dnd));
+    }
+    return array(200, array('ok' => true, 'dnd' => (bool) $dnd));
+});

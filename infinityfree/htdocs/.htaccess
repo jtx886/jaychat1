@@ -1,0 +1,24 @@
+# 部分共享主机（FastCGI/CGI）会剥离 Authorization 头，这里显式回填，
+# 保证 Bearer token 鉴权可用（index.php 也支持 ?token= 兜底）。
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # 1) API 统一交给 index.php 分发（/api、/api/、/api/health ...）
+  RewriteRule ^api(/|$) index.php [L,QSA]
+
+  # 2) 已存在的文件/目录直接访问（/uploads/*、/assets/*、前端构建产物）
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # 3) 其余任意路径 → SPA 前端路由兜底
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# 禁止目录列出
+Options -Indexes
