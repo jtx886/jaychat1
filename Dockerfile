@@ -16,8 +16,15 @@ COPY jaychat/server/public ./public
 COPY jaychat/web/dist /web/dist
 
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    DATA_DIR=/app/data
 
 EXPOSE 3000
+
+# 必须挂载持久存储，否则容器重建（重新部署 / 缩容到 0 后唤醒 / 重启）会清空数据：
+#   /app/data           → SQLite 数据库 jaychat.db（用户 / 好友 / 群 / 消息 / 动态）
+#   /app/public/uploads → 上传的图片与视频
+# CloudBase 云托管请在控制台「存储挂载 / 文件存储(CFS)」把持久卷挂到以上两个路径
+VOLUME ["/app/data", "/app/public/uploads"]
 
 CMD ["node", "src/index.js"]
