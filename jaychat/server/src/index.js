@@ -3,8 +3,9 @@ import cors from 'cors';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
-import { PORT, PUBLIC_DIR, ROOT, DEV_MODE } from './config.js';
+import { PORT, PUBLIC_DIR, ROOT, DEV_MODE, DB_BACKUP_INTERVAL } from './config.js';
 import { db, seedOfficial } from './db.js';
+import { startBackupLoop, snapshotToCos } from './backup.js';
 import { initRealtime } from './realtime.js';
 import authRoutes from './routes/auth.js';
 import usersRouter from './routes/users.js';
@@ -76,6 +77,15 @@ app.use((err, _req, res, _next) => {
 const server = http.createServer(app);
 initRealtime(server);
 const { group: officialGroup } = seedOfficial();
+
+// 数据库云端备份：启动即快照一次，之后按间隔增量上传（配置 COS 后生效）
+startBackupLoop(db, DB_BACKUP_INTERVAL);
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    try { await snapshotToCos(db, true); } catch {}
+    process.exit(0);
+  });
+}
 
 // 启动后异步初始化腾讯云 IM：管理员/AI 账号、官方群同步
 (async () => {

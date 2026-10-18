@@ -16,8 +16,18 @@ COPY jaychat/server/public ./public
 COPY jaychat/web/dist /web/dist
 
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    DATA_DIR=/app/data
 
 EXPOSE 3000
 
-CMD ["node", "src/index.js"]
+# 数据持久化（容器本地磁盘是临时的，重新部署 / 缩容到 0 唤醒 / 重启都会清空）：
+# 方案 A（推荐，免付费）：配置腾讯云对象存储 COS 环境变量
+#   COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION
+#   → 上传媒体直接存 COS；SQLite 数据库定时快照到 COS，容器启动时自动恢复
+# 方案 B：把持久卷挂到下面两个路径（CloudBase 需开通「私有网络 + 存储挂载 CFS」，属付费能力）
+#   /app/data           → SQLite 数据库 jaychat.db
+#   /app/public/uploads → 上传的图片与视频（未配置 COS 时的本地兜底）
+VOLUME ["/app/data", "/app/public/uploads"]
+
+CMD ["node", "src/boot.js"]

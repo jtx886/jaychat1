@@ -37,6 +37,36 @@ export const AI = {
   model: process.env.AI_MODEL || 'glm-4-flash',
 };
 
+/* 腾讯云对象存储 COS：媒体持久化 + 数据库云端备份
+ * 容器本地磁盘是临时的（重新部署/缩容唤醒都会清空），配置 COS 后：
+ *   - 上传的图片/视频直接存到 COS，返回可访问 URL
+ *   - SQLite 数据库按间隔生成一致性快照上传到 COS，容器启动时自动恢复
+ * 未配置时行为与以前一致（仅存本地磁盘）。
+ * 环境变量：COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION
+ *          COS_PREFIX（可选，默认 jaychat）/ COS_PUBLIC_BASE（可选，自定义访问域名） */
+export const COS = {
+  secretId: process.env.COS_SECRET_ID || '',
+  secretKey: process.env.COS_SECRET_KEY || '',
+  bucket: process.env.COS_BUCKET || '', // 形如 xxx-1250000000
+  region: process.env.COS_REGION || '', // 形如 ap-shanghai
+  prefix: (process.env.COS_PREFIX || 'jaychat').replace(/^\/+|\/+$/g, ''),
+  publicBase: (process.env.COS_PUBLIC_BASE || '').replace(/\/+$/, ''),
+  // 可选：自定义接口地址（私有化部署 / 网关 / 本地联调），形如 http://127.0.0.1:9000
+  endpoint: (process.env.COS_ENDPOINT || '').replace(/\/+$/, ''),
+  get enabled() {
+    return !!(this.secretId && this.secretKey && this.bucket && this.region);
+  },
+  /** 对象 key → 可访问 URL（对象需为公有读，或使用自定义域名/CDN） */
+  url(key) {
+    if (this.publicBase) return `${this.publicBase}/${key}`;
+    if (this.endpoint) return `${this.endpoint}/${key}`;
+    return `https://${this.bucket}.cos.${this.region}.myqcloud.com/${key}`;
+  },
+};
+
+/** 数据库云端备份间隔（毫秒），仅当配置了 COS 时生效 */
+export const DB_BACKUP_INTERVAL = Number(process.env.DB_BACKUP_INTERVAL || 20000);
+
 export const OFFICIAL_GROUP_NAME = 'Jay Chat官方群';
 export const OFFICIAL_ACCOUNT = {
   username: '杰同学',

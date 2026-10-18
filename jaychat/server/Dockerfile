@@ -19,10 +19,11 @@ ENV NODE_ENV=production \
 
 EXPOSE 3000
 
-# 数据持久化目录（请挂载卷）
+# 数据持久化：配置 COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION 后
+# 媒体与数据库会自动存到腾讯云 COS；也可挂载卷到下面两个路径
 VOLUME ["/app/data", "/app/public/uploads"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "src/index.js"]
+CMD ["node", "src/boot.js"]

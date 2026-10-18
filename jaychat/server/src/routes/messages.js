@@ -1,10 +1,12 @@
 import express from 'express';
 import multer from 'multer';
+import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { db, now } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { PUBLIC_DIR, OFFICIAL_GROUP_NAME } from '../config.js';
+import { PUBLIC_DIR, OFFICIAL_GROUP_NAME, COS } from '../config.js';
+import { cosEnabled, uploadFile } from '../cos.js';
 import {
   getUser, publicUser, areFriends, dmConvId, memberRole, groupMembers, buildMessage,
   convParticipants, sendToUser, sendToUsers, safeJson, blockedIds, blockedEither,
@@ -28,7 +30,7 @@ const upload = multer({ storage, limits: { fileSize: 300 * 1024 * 1024 } });
 const VIDEO_EXT = ['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv', '.3gp', '.flv', '.wmv', '.mpeg', '.mpg'];
 
 router.post('/upload', requireAuth, (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, async (err) => {
     if (err) {
       const msg = err.code === 'LIMIT_FILE_SIZE' ? '文件过大，单个文件最大支持 300MB' : err.message || '上传失败';
       return res.status(400).json({ error: msg });
@@ -37,7 +39,22 @@ router.post('/upload', requireAuth, (req, res) => {
     // 以文件本身为准判断类型：客户端提示（kind）与 MIME 都可能缺失或错误
     const ext = path.extname(req.file.originalname || '').toLowerCase();
     const isVideo = req.file.mimetype.startsWith('video') || VIDEO_EXT.includes(ext);
-    res.json({ url: `/uploads/${req.file.filename}`, thumb: '', kind: isVideo ? 'video' : 'image', size: req.file.size, mime: req.file.mimetype });
+    const kind = isVideo ? 'video' : 'image';
+
+    // 配置了 COS：媒体转存对象存储（持久），本地临时文件随即删除
+    let url = `/uploads/${req.file.filename}`;
+    if (cosEnabled()) {
+      try {
+        const key = `${COS.prefix}/uploads/${req.file.filename}`;
+        url = (await uploadFile(req.file.path, key, req.file.mimetype)).url;
+      } catch (e) {
+        return res.status(500).json({ error: `媒体转存失败：${e.message}` });
+      } finally {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+    }
+
+    res.json({ url, thumb: '', kind, size: req.file.size, mime: req.file.mimetype });
   });
 });
 
