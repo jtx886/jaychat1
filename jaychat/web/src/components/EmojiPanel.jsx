@@ -416,7 +416,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
             </div>
           ) : !query ? (
             <div className="hint center" style={{ padding: '18px 0' }}>
-              输入关键词搜索，即可看到「结果」与「合成」两类表情
+              输入关键词搜索
             </div>
           ) : sub === 'result' ? (
             <>
