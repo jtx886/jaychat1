@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api, ws } from '../api.js';
+import { api, ws, mediaUrl } from '../api.js';
 import { useApp } from '../App.jsx';
-import { Avatar, ActionSheet, Empty, Loading, TopBar, toast } from '../components/ui.jsx';
-import { IconTile } from '../components/icons.jsx';
+import { Avatar, ActionSheet, Empty, Loading, TopBar, toast, Sheet, MediaViewer, MediaPicker, CameraPicker, Spinner } from '../components/ui.jsx';
+import { Icon, IconTile } from '../components/icons.jsx';
+import EmojiPanel from '../components/EmojiPanel.jsx';
 import { fullTime } from '../lib/time.js';
 import MomentCard from '../components/MomentCard.jsx';
 
@@ -14,6 +15,9 @@ export default function MomentDetailScreen({ momentId }) {
   const [replyTo, setReplyTo] = useState(null); // { user }
   const [actionComment, setActionComment] = useState(null);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [panel, setPanel] = useState(null); // emoji | plus
+  const [viewer, setViewer] = useState(null); // { url, type }
   const inputRef = useRef(null);
 
   const load = async () => {
@@ -50,20 +54,64 @@ export default function MomentDetailScreen({ momentId }) {
     }
   };
 
-  const sendComment = async () => {
-    const content = text.trim();
-    if (!content) return;
+  const busy = sending || uploading;
+
+  /** 发送评论：文字 / 图片 / 视频 / 表情 / 动画表情包 */
+  const sendComment = async ({ content = '', msgType = 'text', mediaUrl: mUrl = '', mediaThumb = '' } = {}) => {
+    const c = String(content).trim();
+    if (msgType === 'text' && !c) return;
+    if (msgType !== 'text' && !mUrl) return;
     setSending(true);
     try {
-      const d = await api.post(`/api/moments/${momentId}/comments`, { content, replyToUserId: replyTo?.user?.id || 0 });
+      const d = await api.post(`/api/moments/${momentId}/comments`, {
+        content: c, msg_type: msgType, media_url: mUrl, media_thumb: mediaThumb,
+        replyToUserId: replyTo?.user?.id || 0,
+      });
       setMoment(d.moment);
       setText('');
       setReplyTo(null);
-      toast('评论已发送');
+      toast(msgType === 'text' ? '评论已发送' : '已发送');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
       setSending(false);
+    }
+  };
+
+  /** 表情面板发送动画表情包（url 直发 / blob 先上传） */
+  const sendSticker = async ({ url, blob, label }) => {
+    setPanel(null);
+    try {
+      let finalUrl = url;
+      if (blob) {
+        const up = await api.upload(new File([blob], 'sticker.png', { type: 'image/png' }), 'image');
+        finalUrl = up.url;
+      }
+      if (!finalUrl) return;
+      await sendComment({ content: text, msgType: 'sticker', mediaUrl: finalUrl, mediaThumb: '' });
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  /** 选择图片 / 视频后上传并发送 */
+  const pickMedia = async (files, kind) => {
+    const f = files?.[0];
+    if (!f) return;
+    setPanel(null);
+    setUploading(true);
+    try {
+      const up = await api.upload(f, kind);
+      await sendComment({
+        content: text,
+        msgType: up.kind === 'video' ? 'video' : 'image',
+        mediaUrl: up.url,
+        mediaThumb: up.thumb || '',
+      });
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -114,20 +162,46 @@ export default function MomentDetailScreen({ momentId }) {
         <div className="section-head">评论（{moment.comments?.length || 0}）</div>
         <div className="glass mx" style={{ padding: 12 }}>
           {moment.comments?.length ? (
-            moment.comments.map((c) => (
-              <div key={c.id} className="flex gap12" style={{ alignItems: 'flex-start', padding: '7px 0' }}>
-                <Avatar user={c.user} size={36} onClick={c.user?.id ? () => openUser(c.user) : undefined} />
-                <div className="grow">
-                  <div className="comment-line" style={{ padding: 0 }}>
-                    <b>{c.user?.username}</b>
-                    {c.reply_to_user ? <span className="dim"> 回复 {c.reply_to_user.username}</span> : null}
-                    <span>：{c.content}</span>
+            moment.comments.map((c) => {
+              const isSticker = c.msg_type === 'sticker' && c.media_url;
+              const isImage = c.msg_type === 'image' && c.media_url;
+              const isVideo = c.msg_type === 'video' && c.media_url;
+              return (
+                <div key={c.id} className="flex gap12" style={{ alignItems: 'flex-start', padding: '7px 0' }}>
+                  <Avatar user={c.user} size={36} onClick={c.user?.id ? () => openUser(c.user) : undefined} />
+                  <div className="grow">
+                    <div className="comment-line" style={{ padding: 0 }}>
+                      <b>{c.user?.username}</b>
+                      {c.reply_to_user ? <span className="dim"> 回复 {c.reply_to_user.username}</span> : null}
+                      {c.content ? <span>：{c.content}</span> : null}
+                    </div>
+                    {isSticker ? (
+                      <img
+                        className="comment-sticker press-scale"
+                        src={mediaUrl(c.media_url)}
+                        alt={c.content || '动画表情'}
+                        loading="lazy"
+                        onClick={() => setViewer({ url: c.media_url, type: 'image' })}
+                      />
+                    ) : null}
+                    {isImage || isVideo ? (
+                      <div className="comment-media press-scale" onClick={() => setViewer({ url: c.media_url, type: c.msg_type })}>
+                        {isVideo ? (
+                          <video src={mediaUrl(c.media_url)} muted playsInline preload="metadata" />
+                        ) : (
+                          <img src={mediaUrl(c.media_thumb || c.media_url)} alt="评论图片" loading="lazy" />
+                        )}
+                        {isVideo ? (
+                          <span className="comment-media-tag"><Icon name="play" size={11} filled /> 视频</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="hint" style={{ marginTop: 3 }}>{fullTime(c.created_at)}</div>
                   </div>
-                  <div className="hint" style={{ marginTop: 3 }}>{fullTime(c.created_at)}</div>
+                  <span className="hint press-scale" style={{ cursor: 'pointer' }} onClick={() => setActionComment(c)}>···</span>
                 </div>
-                <span className="hint press-scale" style={{ cursor: 'pointer' }} onClick={() => setActionComment(c)}>···</span>
-              </div>
-            ))
+              );
+            })
           ) : (
             <Empty icon="message" text="还没有评论，来说点什么吧" />
           )}
@@ -143,16 +217,77 @@ export default function MomentDetailScreen({ momentId }) {
         </div>
       ) : null}
       <div className="chat-input-wrap">
+        <button className="icon-btn" onClick={() => setPanel(panel === 'emoji' ? null : 'emoji')} aria-label="表情">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+            <circle cx="9" cy="10" r="1.2" fill="currentColor" />
+            <circle cx="15" cy="10" r="1.2" fill="currentColor" />
+            <path d="M8.4 14.4c.9 1.3 2.1 2 3.6 2s2.7-.7 3.6-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
         <input
           ref={inputRef}
           className="chat-input"
           placeholder="写评论…"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendComment()}
+          onKeyDown={(e) => e.key === 'Enter' && sendComment({ content: text, msgType: 'text' })}
         />
-        <button className="btn btn-primary" style={{ padding: '11px 16px' }} disabled={sending || !text.trim()} onClick={sendComment}>发送</button>
+        <button className="icon-btn" onClick={() => setPanel(panel === 'plus' ? null : 'plus')} aria-label="更多">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          className="btn btn-primary"
+          style={{ padding: '11px 16px' }}
+          disabled={busy || !text.trim()}
+          onClick={() => sendComment({ content: text, msgType: 'text' })}
+        >
+          {uploading ? <Spinner size={16} /> : '发送'}
+        </button>
       </div>
+
+      {/* 表情 / 动画表情包面板 */}
+      <Sheet open={panel === 'emoji'} onClose={() => setPanel(null)}>
+        <EmojiPanel onEmoji={(e) => setText((t) => t + e)} onSendSticker={sendSticker} />
+      </Sheet>
+
+      {/* + 面板：图片 / 视频 / 拍摄 */}
+      <Sheet open={panel === 'plus'} onClose={() => setPanel(null)} title="评论内容">
+        <div className="grid2" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <MediaPicker onPick={(f) => pickMedia(f, 'image')} accept="image/*" multiple={false}>
+            <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
+              <Icon name="image" size={26} strokeWidth={1.8} />
+              <div className="hint" style={{ marginTop: 6 }}>相册图片</div>
+            </div>
+          </MediaPicker>
+          <MediaPicker onPick={(f) => pickMedia(f, 'video')} accept="video/*" multiple={false}>
+            <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
+              <Icon name="video" size={26} strokeWidth={1.8} />
+              <div className="hint" style={{ marginTop: 6 }}>相册视频</div>
+            </div>
+          </MediaPicker>
+          <CameraPicker onPick={(f) => pickMedia(f, 'image')} kind="image">
+            <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
+              <Icon name="camera" size={26} strokeWidth={1.8} />
+              <div className="hint" style={{ marginTop: 6 }}>拍摄照片</div>
+            </div>
+          </CameraPicker>
+          <CameraPicker onPick={(f) => pickMedia(f, 'video')} kind="video">
+            <div className="glass pad press-scale" style={{ textAlign: 'center', borderRadius: 16 }}>
+              <Icon name="camera" size={26} strokeWidth={1.8} />
+              <div className="hint" style={{ marginTop: 6 }}>拍摄视频</div>
+            </div>
+          </CameraPicker>
+        </div>
+        <div className="hint" style={{ marginTop: 10 }}>
+          选中图片/视频后立即发送，输入框里的文字会作为文字说明一起发出；表情与动画表情包在「表情」面板中选择。
+        </div>
+      </Sheet>
+
+      {/* 媒体查看 */}
+      {viewer ? <MediaViewer item={{ url: viewer.url, type: viewer.type }} onClose={() => setViewer(null)} /> : null}
 
       <ActionSheet
         open={!!actionComment}

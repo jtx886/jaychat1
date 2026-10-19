@@ -171,6 +171,10 @@ function jc_schema_tables()
                 array('moment_id', 'int', 'notnull'),
                 array('user_id', 'int', 'notnull'),
                 array('content', 'str:500', 'default:'),
+                // 评论类型：text | image | video | sticker（支持图片/视频/表情/动画表情包）
+                array('msg_type', 'str:16', 'default:text'),
+                array('media_url', 'str:1000', 'default:'),
+                array('media_thumb', 'str:1000', 'default:'),
                 array('reply_to_user', 'int', 'default:0'),
                 array('deleted', 'int', 'default:0'),
                 array('created_at', 'bigint', 'notnull'),

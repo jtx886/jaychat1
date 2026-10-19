@@ -455,6 +455,18 @@ body {
 .moment-act.liked { color: #ff8fa6; background: rgba(255, 95, 122, .14); border-color: rgba(255, 95, 122, .3); }
 .comment-line { font-size: 13.6px; line-height: 1.6; padding: 5px 0; }
 .comment-line b { color: var(--brand-2); font-weight: 800; }
+/* 动态评论中的图片 / 视频 / 动画表情包 */
+.comment-sticker { max-width: 120px; max-height: 120px; border-radius: 12px; display: block; margin-top: 5px; cursor: pointer; }
+.comment-media {
+  margin-top: 5px; border-radius: 14px; overflow: hidden; position: relative; max-width: 190px;
+  background: rgba(255, 255, 255, .05); border: 1px solid var(--glass-border); cursor: pointer;
+}
+.comment-media img, .comment-media video { display: block; width: 100%; max-height: 190px; object-fit: cover; }
+.comment-media-tag {
+  position: absolute; left: 6px; top: 6px; font-size: 11px; font-weight: 700; color: #fff;
+  background: rgba(0, 0, 0, .55); border-radius: 8px; padding: 2px 7px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
 .like-names { font-size: 13px; color: var(--brand-2); font-weight: 700; }
 
 /* ---------------------------- 其它 ---------------------------- */

@@ -182,7 +182,7 @@ route('POST', '#^/api/moments/(\d+)/like$#', function ($params, $body) {
     return array(200, array('moment' => $shaped));
 });
 
-// 评论 / 回复
+// 评论 / 回复（支持文字、图片、视频、表情、动画表情包）
 route('POST', '#^/api/moments/(\d+)/comments$#', function ($params, $body) {
     $uid = require_auth();
     $id = (int) $params[0];
@@ -190,15 +190,31 @@ route('POST', '#^/api/moments/(\d+)/comments$#', function ($params, $body) {
     if (!$m) {
         return array(404, array('error' => '动态不存在或已删除'));
     }
+    $msgType = isset($body['msg_type']) ? (string) $body['msg_type'] : 'text';
+    if (!in_array($msgType, array('text', 'image', 'video', 'sticker'), true)) {
+        $msgType = 'text';
+    }
     $content = isset($body['content']) ? trim((string) $body['content']) : '';
     $content = mb_substr($content, 0, 300, 'UTF-8');
-    if ($content === '') {
-        return array(400, array('error' => '评论内容不能为空'));
+    $mediaUrl = isset($body['media_url']) ? mb_substr(trim((string) $body['media_url']), 0, 1000, 'UTF-8') : '';
+    $mediaThumb = isset($body['media_thumb']) ? mb_substr(trim((string) $body['media_thumb']), 0, 1000, 'UTF-8') : '';
+
+    if ($msgType === 'text') {
+        if ($content === '') {
+            return array(400, array('error' => '评论内容不能为空'));
+        }
+    } elseif ($mediaUrl === '') {
+        return array(400, array('error' => '请先选择要发送的图片/视频/表情'));
     }
+    // 通知里展示的文本：有文字用文字，没有则用类型占位
+    $preview = $content !== ''
+        ? $content
+        : ($msgType === 'image' ? '[图片]' : ($msgType === 'video' ? '[视频]' : '[动画表情]'));
+
     $replyTo = isset($body['replyToUserId']) ? (int) $body['replyToUserId'] : 0;
     $cid = db_insert(
-        'INSERT INTO `moment_comments` (`moment_id`, `user_id`, `content`, `reply_to_user`, `deleted`, `created_at`) VALUES (?, ?, ?, ?, 0, ?)',
-        array($id, $uid, $content, $replyTo ?: 0, now_ms())
+        'INSERT INTO `moment_comments` (`moment_id`, `user_id`, `content`, `msg_type`, `media_url`, `media_thumb`, `reply_to_user`, `deleted`, `created_at`) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)',
+        array($id, $uid, $content, $msgType, $mediaUrl, $mediaThumb, $replyTo ?: 0, now_ms())
     );
     $me = public_user(get_user($uid));
 
@@ -207,7 +223,7 @@ route('POST', '#^/api/moments/(\d+)/comments$#', function ($params, $body) {
             'user_id' => $replyTo,
             'type' => 'comment_reply',
             'actor_id' => $uid,
-            'text' => $me['username'] . ' 回复了你的评论：' . $content,
+            'text' => $me['username'] . ' 回复了你的评论：' . $preview,
             'ref_type' => 'moment',
             'ref_id' => $id,
         ));
@@ -217,7 +233,7 @@ route('POST', '#^/api/moments/(\d+)/comments$#', function ($params, $body) {
             'user_id' => (int) $m['author_id'],
             'type' => 'moment_comment',
             'actor_id' => $uid,
-            'text' => $me['username'] . ' 评论了你的动态：' . $content,
+            'text' => $me['username'] . ' 评论了你的动态：' . $preview,
             'ref_type' => 'moment',
             'ref_id' => $id,
         ));

@@ -192,6 +192,10 @@ function db_install()
                 db_ensure_column('users', 'banned', '`banned` INTEGER DEFAULT 0');
                 db_ensure_column('users', 'banned_until', '`banned_until` BIGINT DEFAULT 0');
                 db_ensure_column('users', 'muted_until', '`muted_until` BIGINT DEFAULT 0');
+                // 动态评论支持媒体
+                db_ensure_column('moment_comments', 'msg_type', "`msg_type` TEXT DEFAULT 'text'");
+                db_ensure_column('moment_comments', 'media_url', "`media_url` TEXT DEFAULT ''");
+                db_ensure_column('moment_comments', 'media_thumb', "`media_thumb` TEXT DEFAULT ''");
             } else {
                 db_ensure_column('messages', 'burn_sec', '`burn_sec` INT DEFAULT 5');
                 db_ensure_column('users', 'last_poll', '`last_poll` BIGINT DEFAULT 0');
@@ -199,6 +203,10 @@ function db_install()
                 db_ensure_column('users', 'banned', '`banned` INT DEFAULT 0');
                 db_ensure_column('users', 'banned_until', '`banned_until` BIGINT DEFAULT 0');
                 db_ensure_column('users', 'muted_until', '`muted_until` BIGINT DEFAULT 0');
+                // 动态评论支持媒体
+                db_ensure_column('moment_comments', 'msg_type', "`msg_type` VARCHAR(16) DEFAULT 'text'");
+                db_ensure_column('moment_comments', 'media_url', '`media_url` VARCHAR(1000) DEFAULT ""');
+                db_ensure_column('moment_comments', 'media_thumb', '`media_thumb` VARCHAR(1000) DEFAULT ""');
             }
         } catch (Exception $e) {
         }

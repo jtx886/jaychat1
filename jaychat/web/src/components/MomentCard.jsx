@@ -92,7 +92,10 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
             <div key={c.id} className="comment-line">
               <b>{c.user?.username}</b>
               {c.reply_to_user ? <span className="dim"> 回复 {c.reply_to_user.username}</span> : null}
-              <span>：{c.content}</span>
+              <span>
+                ：{c.content
+                  || (c.msg_type === 'image' ? '[图片]' : c.msg_type === 'video' ? '[视频]' : c.msg_type === 'sticker' ? '[动画表情]' : '')}
+              </span>
             </div>
           ))}
         </div>
