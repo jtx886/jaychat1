@@ -26,6 +26,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [confirmAct, setConfirmAct] = useState(null); // 'delete' | 'block'
   const [viewer, setViewer] = useState(null);
   const [actionMsg, setActionMsg] = useState(null);
+  const [replyMsg, setReplyMsg] = useState(null);
+  const [relatedSticker, setRelatedSticker] = useState(null); // {open, loading, keyword, items}
+  const [favUrls, setFavUrls] = useState(() => new Set());
   const [mentionOpen, setMentionOpen] = useState(false);
   const [onlineSheet, setOnlineSheet] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -73,6 +76,76 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const scrollToBottom = () => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  /* ---------- 我的添加（表情收藏） ---------- */
+  const loadStickerFavs = async () => {
+    try {
+      const d = await api.get('/api/stickers/favs');
+      setFavUrls(new Set((d.items || []).map((f) => f.url)));
+    } catch {}
+  };
+  useEffect(() => {
+    loadStickerFavs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** 把 @某人 插入输入框 */
+  const insertMentionFor = (user) => {
+    const nm = user?.username;
+    if (!nm) return;
+    setText((t) => `${t}@${nm} `);
+  };
+
+  /** 长按头像/右键头像：群聊中自动 @ 对方 */
+  const avatarMentionHandlers = (user, enabled) => {
+    if (!enabled) return {};
+    const fire = (e) => {
+      e?.preventDefault?.();
+      insertMentionFor(user);
+    };
+    return {
+      onContextMenu: fire,
+      onTouchStart: (e) => {
+        e.currentTarget._atTimer = setTimeout(() => fire(), 480);
+      },
+      onTouchEnd: (e) => clearTimeout(e.currentTarget._atTimer),
+      onTouchMove: (e) => clearTimeout(e.currentTarget._atTimer),
+    };
+  };
+
+  /** 消息预览文案（用于引用条 / 引用块） */
+  const previewText = (m) => {
+    if (!m) return '';
+    if (m.recalled) return '该消息已撤回';
+    if (m.msg_type === 'image') return '[图片]';
+    if (m.msg_type === 'video') return '[视频]';
+    if (m.msg_type === 'sticker') return '[动画表情]';
+    return m.content || '';
+  };
+  const senderNameOf = (m) => (m?.sender_id === 0 ? m?.sender?.username || 'AI' : m?.sender?.username || '用户');
+
+  /** 添加表情到「我的添加」 */
+  const addStickerFav = async (url, label) => {
+    try {
+      const d = await api.post('/api/stickers/favs', { url, label: label || '' });
+      setFavUrls(new Set((d.items || []).map((f) => f.url)));
+      toast('已添加到「我的添加」');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  /** 打开相关表情 */
+  const openRelated = async (url, label) => {
+    setRelatedSticker({ open: true, loading: true, keyword: label || '', items: [] });
+    try {
+      const d = await api.get(`/api/stickers/related?url=${encodeURIComponent(url || '')}&label=${encodeURIComponent(label || '')}`);
+      setRelatedSticker({ open: true, loading: false, keyword: d.keyword || '', items: d.items || [] });
+    } catch (e) {
+      setRelatedSticker({ open: true, loading: false, keyword: '', items: [] });
+      toast(e.message, 'error');
+    }
   };
 
   /* ---------- 实时事件 ---------- */
@@ -131,13 +204,43 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   /* ---------- 发送 ---------- */
-  const sendText = async (content, msgType = 'text') => {
-    const body = String(content || '').trim();
+  const sendText = async (content, msgType = 'text', reply = replyMsg) => {
+    let body = String(content || '').trim();
     if (!body) return;
+    // 群聊中回复引用他人消息时，自动 @ 对方（与微信/QQ 群回复一致）
+    if (isGroup && reply && msgType === 'text' && reply.sender_id !== me.id) {
+      const nm = reply.sender?.username;
+      if (nm && !body.startsWith(`@${nm}`)) body = `@${nm} ${body}`;
+    }
     try {
-      const d = await api.post('/api/messages', { convType, convId, msg_type: msgType, content: body });
+      const payload = { convType, convId, msg_type: msgType, content: body };
+      if (reply?.id) payload.reply_to = reply.id;
+      const d = await api.post('/api/messages', payload);
       setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
       setText('');
+      setReplyMsg(null);
+      setTimeout(scrollToBottom, 40);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  /** 发送表情（EmojiPanel 回调：url 直发 / blob 先上传） */
+  const sendSticker = async ({ url, blob, label }) => {
+    const reply = replyMsg;
+    setPanel(null);
+    try {
+      let finalUrl = url;
+      if (blob) {
+        const up = await api.upload(new File([blob], 'sticker.png', { type: 'image/png' }), 'image');
+        finalUrl = up.url;
+      }
+      if (!finalUrl) return;
+      const payload = { convType, convId, msg_type: 'sticker', content: label || '', media_url: finalUrl };
+      if (reply?.id) payload.reply_to = reply.id;
+      const d = await api.post('/api/messages', payload);
+      setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
+      setReplyMsg(null);
       setTimeout(scrollToBottom, 40);
     } catch (e) {
       toast(e.message, 'error');
@@ -261,27 +364,35 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const renderMessage = (m) => {
     const mine = m.sender_id === me.id;
     const isAI = m.sender_id === 0 || m.extra?.ai;
-    const senderName = isAI ? 'Jay AI' : m.sender?.username || '用户';
+    const senderName = isAI ? m.sender?.username || 'Jay AI' : m.sender?.username || '用户';
     const sticker = m.msg_type === 'sticker' ? m.content : null;
+    const quote = m.extra?.reply || null;
     const rl = readLabel(m);
+    const canAt = isGroup && !mine && !!senderName;
 
     return (
       <div key={m.id} className={'msg-row' + (mine ? ' mine' : '')}>
         {!mine ? (
-          <Avatar
-            user={isAI ? { id: 'ai', username: 'Jay AI', avatar: '' } : m.sender}
-            name={senderName}
-            size={38}
-            showOnline={!isAI}
-            onClick={!isAI && m.sender?.id ? () => app.openUser(m.sender) : undefined}
-          />
+          <span
+            className={canAt ? 'avatar-at' : undefined}
+            title={canAt ? '长按可 @ 对方' : undefined}
+            {...avatarMentionHandlers({ username: senderName, id: m.sender?.id }, canAt)}
+          >
+            <Avatar
+              user={isAI ? { id: 0, username: senderName, avatar: m.sender?.avatar || '' } : m.sender}
+              name={senderName}
+              size={38}
+              showOnline={!isAI}
+              onClick={!isAI && m.sender?.id ? () => app.openUser(m.sender) : undefined}
+            />
+          </span>
         ) : null}
         <div style={{ maxWidth: '78%', minWidth: 0 }}>
           {isGroup && !mine ? (
             <div className="sender-name" style={isAI ? { color: 'var(--ai)', fontWeight: 700 } : undefined}>
               {isAI ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <Icon name="robot" size={14} strokeWidth={1.9} /> Jay AI
+                  <Icon name="robot" size={14} strokeWidth={1.9} /> {senderName}
                 </span>
               ) : senderName}
             </div>
@@ -307,6 +418,12 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             onTouchEnd={(e) => clearTimeout(e.currentTarget._lp)}
             onTouchMove={(e) => clearTimeout(e.currentTarget._lp)}
           >
+            {quote && !m.recalled ? (
+              <div className="quote" onClick={(e) => e.stopPropagation()}>
+                <span className="quote-name">{quote.name}</span>
+                <span className="quote-text">{quote.text}</span>
+              </div>
+            ) : null}
             {m.recalled ? (
               <span>该消息已撤回</span>
             ) : m.burned ? (
@@ -333,6 +450,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                   <img src={mediaUrl(m.media_url)} alt="" loading="lazy" />
                 )}
               </div>
+            ) : m.msg_type === 'sticker' && m.media_url ? (
+              <img className="bubble-sticker" src={mediaUrl(m.media_url)} alt="" loading="lazy" />
             ) : sticker ? (
               <StickerView text={sticker} />
             ) : (
@@ -394,6 +513,18 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         )}
       </div>
 
+      {replyMsg ? (
+        <div className="reply-bar">
+          <div className="reply-bar-main">
+            <div className="reply-bar-name">回复 {senderNameOf(replyMsg)}</div>
+            <div className="reply-bar-text">{previewText(replyMsg)}</div>
+          </div>
+          <button className="reply-bar-x" onClick={() => setReplyMsg(null)} aria-label="取消回复">
+            <Icon name="close" size={16} strokeWidth={2.1} />
+          </button>
+        </div>
+      ) : null}
+
       <div className="chat-input-wrap">
         <button className="icon-btn" onClick={() => setPanel(panel === 'emoji' ? null : 'emoji')} aria-label="表情">
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
@@ -440,13 +571,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
 
       {/* 表情面板 */}
       <Sheet open={panel === 'emoji'} onClose={() => setPanel(null)}>
-        <EmojiPanel
-          onEmoji={(e) => setText((t) => t + e)}
-          onSticker={(code) => {
-            setPanel(null);
-            sendText(code, 'sticker');
-          }}
-        />
+        <EmojiPanel onEmoji={(e) => setText((t) => t + e)} onSendSticker={sendSticker} />
       </Sheet>
 
       {/* + 面板 */}
@@ -600,15 +725,57 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         actions={
           actionMsg
             ? [
-                ...(canRecall(actionMsg) ? [{ icon: <IconTile name="reply" tone="amber" box={34} size={18} />, label: '撤回（3 分钟内）', onClick: () => doRecall(actionMsg) }] : []),
+                ...(!actionMsg.recalled
+                  ? [{ icon: <IconTile name="reply" tone="mint" box={34} size={18} />, label: '回复', onClick: () => setReplyMsg(actionMsg) }]
+                  : []),
+                ...(canRecall(actionMsg) ? [{ icon: <IconTile name="clock" tone="amber" box={34} size={18} />, label: '撤回（3 分钟内）', onClick: () => doRecall(actionMsg) }] : []),
                 ...((actionMsg.msg_type === 'text' || actionMsg.msg_type === 'sticker') && !actionMsg.recalled
                   ? [{ icon: <IconTile name="copy" tone="sky" box={34} size={18} />, label: '复制', onClick: () => doCopy(actionMsg) }]
+                  : []),
+                ...(actionMsg.msg_type === 'sticker' && actionMsg.media_url && !actionMsg.recalled
+                  ? [
+                      ...(favUrls.has(actionMsg.media_url)
+                        ? []
+                        : [{ icon: <IconTile name="star" tone="amber" box={34} size={18} />, label: '添加到「我的添加」', onClick: () => addStickerFav(actionMsg.media_url, actionMsg.content) }]),
+                      { icon: <IconTile name="link" tone="cyan" box={34} size={18} />, label: '相关表情', onClick: () => openRelated(actionMsg.media_url, actionMsg.content) },
+                    ]
                   : []),
                 { icon: <IconTile name="trash" tone="rose" box={34} size={18} />, label: '删除', danger: true, onClick: () => doDeleteLocal(actionMsg) },
               ]
             : []
         }
       />
+
+      {/* 相关表情 */}
+      <Sheet
+        open={!!relatedSticker?.open}
+        onClose={() => setRelatedSticker(null)}
+        title={`相关表情${relatedSticker?.keyword ? ' · ' + relatedSticker.keyword : ''}`}
+      >
+        {relatedSticker?.loading ? (
+          <div className="center" style={{ padding: '30px 0' }}>
+            <Spinner size={22} />
+          </div>
+        ) : relatedSticker?.items?.length ? (
+          <div className="emoji-grid anim">
+            {relatedSticker.items.map((it) => (
+              <button
+                key={it.id}
+                className="sticker-cell"
+                title={it.label || ''}
+                onClick={() => {
+                  setRelatedSticker(null);
+                  sendSticker({ url: it.url, label: it.label });
+                }}
+              >
+                <img src={mediaUrl(it.thumb || it.url)} alt={it.label || ''} loading="lazy" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="hint center" style={{ padding: '26px 0' }}>没有找到相关表情</div>
+        )}
+      </Sheet>
 
       {/* 媒体查看 */}
       {viewer ? (

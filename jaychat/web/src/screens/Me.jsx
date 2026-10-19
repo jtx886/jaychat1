@@ -66,6 +66,24 @@ export default function MeScreen() {
           </div>
         </div>
 
+        {me?.is_admin ? (
+          <>
+            <div className="section-head">管理</div>
+            <div className="glass mx">
+              <div className="list">
+                <div className="list-item" onClick={() => push('admin')}>
+                  <IconTile name="shield" tone="violet" />
+                  <div className="list-main">
+                    <div className="list-title">管理员后台</div>
+                    <div className="list-desc">全站数据总览 · AI 配置 · 用户封禁 / 禁言</div>
+                  </div>
+                  <span className="chev dim">›</span>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+
         <div className="section-head">我的动态</div>
         <div className="glass mx">
           <div className="list">

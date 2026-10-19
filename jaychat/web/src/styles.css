@@ -671,6 +671,81 @@ body {
 .upload-progress { height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .12); overflow: hidden; }
 .upload-progress i { display: block; height: 100%; width: 40%; background: var(--brand-grad); animation: shimmer 1.1s infinite; }
 
+/* ---------------------------- 消息引用 / 回复 ---------------------------- */
+.quote {
+  display: flex; flex-direction: column; gap: 1px; margin: -2px 0 6px;
+  padding: 6px 9px; border-radius: 10px; background: rgba(0, 0, 0, .22);
+  border-left: 3px solid rgba(255, 255, 255, .5); max-width: 100%;
+}
+.msg-row.mine .quote { background: rgba(0, 0, 0, .2); border-left-color: rgba(255, 255, 255, .72); }
+.quote-name { font-size: 11.5px; font-weight: 800; color: var(--brand-2); }
+.msg-row.mine .quote-name { color: #eaf1ff; }
+.quote-text { font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.msg-row.mine .quote-text { color: rgba(255, 255, 255, .82); }
+.bubble-sticker { max-width: 168px; border-radius: 12px; display: block; }
+.avatar-at { cursor: pointer; display: inline-flex; }
+
+.reply-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: rgba(14, 18, 38, .82); border-top: 1px solid rgba(255, 255, 255, .07);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  animation: msgIn .22s var(--ease-spring) both;
+}
+.reply-bar-main { flex: 1; min-width: 0; border-left: 3px solid var(--brand-2); padding-left: 9px; }
+.reply-bar-name { font-size: 12px; font-weight: 800; color: var(--brand-2); }
+.reply-bar-text { font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reply-bar-x { border: none; background: rgba(255, 255, 255, .08); color: var(--text-2); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 auto; }
+
+/* ---------------------------- 表情搜索 / 收藏 ---------------------------- */
+.sticker-search { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .06); border: 1px solid var(--glass-border); border-radius: 16px; padding: 5px 6px 5px 12px; }
+.sticker-search-icon { color: var(--text-3); flex: 0 0 auto; }
+.sticker-search-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--text); font-size: 14.5px; font-family: inherit; }
+.sticker-fav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 8px rgba(255, 184, 77, .8); }
+.sticker-cell { position: relative; }
+
+.compose-preview {
+  width: 100%; height: 100%; border-radius: 12px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; overflow: hidden;
+}
+.compose-emoji { font-size: 34px; line-height: 1; }
+.compose-text { font-size: 12px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, .35); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------------------- 管理员后台 ---------------------------- */
+.admin-tabs { display: flex; gap: 8px; padding: 6px 12px 4px; overflow-x: auto; }
+.admin-tab {
+  flex: 0 0 auto; padding: 8px 14px; border-radius: 12px; font-size: 13.5px; font-weight: 700; cursor: pointer;
+  border: 1px solid var(--glass-border); background: rgba(255, 255, 255, .05); color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 6px; transition: background .2s, color .2s;
+}
+.admin-tab.active { background: var(--brand-grad); color: #fff; border-color: rgba(255, 255, 255, .2); box-shadow: var(--glow-brand); }
+
+.admin-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 8px 12px 0; }
+.admin-stat { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 18px; }
+.admin-stat-val { font-size: 24px; font-weight: 800; line-height: 1; }
+.admin-stat-label { font-size: 12.5px; color: var(--text-2); font-weight: 700; }
+
+.admin-chart { display: flex; align-items: flex-end; gap: 6px; height: 150px; }
+.admin-chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.admin-chart-bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; width: 100%; justify-content: center; }
+.admin-bar { width: 8px; min-height: 3px; border-radius: 4px 4px 0 0; transition: height .4s var(--ease-out); }
+.bar-user { background: linear-gradient(180deg, #6ee7ff, #4f7bff); }
+.bar-msg { background: linear-gradient(180deg, #9db6ff, #7a5cff); }
+.admin-chart-label { font-size: 10.5px; color: var(--text-3); }
+.admin-chart-num { font-size: 10px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+.admin-tag { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 8px; margin-left: 6px; display: inline-block; }
+.tag-ban { color: #ffb4c0; background: rgba(255, 95, 122, .16); border: 1px solid rgba(255, 95, 122, .36); }
+.tag-mute { color: #ffd479; background: rgba(255, 184, 77, .16); border: 1px solid rgba(255, 184, 77, .36); }
+
+.admin-user-item { align-items: center; }
+.admin-mini {
+  border: 1px solid var(--glass-border); background: rgba(255, 255, 255, .06); color: var(--text-2);
+  font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 10px; cursor: pointer;
+}
+.admin-mini.danger { color: #ff9dad; border-color: rgba(255, 95, 122, .34); background: rgba(255, 95, 122, .1); }
+.admin-mini.positive { color: var(--ok); border-color: rgba(47, 216, 138, .34); background: rgba(47, 216, 138, .1); }
+
 /* ============================================================================
  * 响应式：平板 / 电脑 自动适配
  * ========================================================================== */

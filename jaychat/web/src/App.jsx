@@ -21,6 +21,7 @@ import EditProfileScreen from './screens/EditProfile.jsx';
 import ServerSettingsScreen from './screens/ServerSettings.jsx';
 import UserMomentsScreen from './screens/UserMoments.jsx';
 import BlacklistScreen from './screens/Blacklist.jsx';
+import AdminScreen from './screens/Admin.jsx';
 
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
@@ -339,6 +340,8 @@ export default function App() {
         return <UserMomentsScreen {...r.params} />;
       case 'blacklist':
         return <BlacklistScreen />;
+      case 'admin':
+        return <AdminScreen />;
       default:
         return <MainShell />;
     }

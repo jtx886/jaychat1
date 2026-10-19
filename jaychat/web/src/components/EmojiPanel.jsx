@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api.js';
+import { api, mediaUrl } from '../api.js';
 import { EMOJI_CATEGORIES, STICKER_HOT_KEYWORDS, parseSticker } from '../lib/emoji.js';
 import { Icon } from './icons.jsx';
 import { Sheet, ActionSheet, Spinner, toast } from './ui.jsx';
@@ -75,7 +75,7 @@ function composeBlob(item) {
 }
 
 /* ============================ 长按/点击贴纸 ============================ */
-function StickerTile({ item, isFav, inMine, onSend, onMenu }) {
+function StickerTile({ item, isFav, onSend, onMenu }) {
   const timer = useRef(null);
   const longFired = useRef(false);
   const clear = () => {
@@ -129,10 +129,9 @@ function StickerTile({ item, isFav, inMine, onSend, onMenu }) {
           <span className="compose-text">{item.label}</span>
         </div>
       ) : (
-        <img src={item.thumb || item.url} alt={item.label || ''} loading="lazy" />
+        <img src={mediaUrl(item.thumb || item.url)} alt={item.label || ''} loading="lazy" />
       )}
       {isFav ? <span className="sticker-fav-dot" /> : null}
-      {inMine ? null : null}
     </button>
   );
 }
@@ -263,7 +262,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
     return acts;
   };
 
-  const renderGrid = (items, opts = {}) => {
+  const renderGrid = (items) => {
     if (!items.length) {
       return <div className="hint center" style={{ padding: '26px 0' }}>没有找到相关表情</div>;
     }
@@ -274,7 +273,6 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
             key={it.id}
             item={it}
             isFav={it.url ? favUrls.has(it.url) : false}
-            inMine={!!opts.inMine}
             onSend={sendItem}
             onMenu={setMenu}
           />
@@ -380,7 +378,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
 
       {tab === 'mine' ? (
         favs.length ? (
-          renderGrid(favs, { inMine: true })
+          renderGrid(favs)
         ) : (
           <div className="hint center" style={{ padding: '26px 0' }}>
             还没有添加表情{'\n'}在表情上长按即可「添加到我的添加」
