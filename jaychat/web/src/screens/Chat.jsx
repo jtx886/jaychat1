@@ -11,6 +11,13 @@ import { isVideoFile } from '../lib/media.js';
 
 const RECALL_WINDOW = 3 * 60 * 1000;
 
+/** 消息内容是否在呼叫 Jay AI（支持管理员自定义的 AI 名称） */
+function mentionsAi(text, aiName) {
+  const s = String(text || '');
+  if (/@\s*jay\s*ai/i.test(s)) return true;
+  return !!aiName && s.includes('@' + aiName);
+}
+
 export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const app = useApp();
   const { me, presence, push, back, refreshConversations, openConvRef } = app;
@@ -30,6 +37,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [relatedSticker, setRelatedSticker] = useState(null); // {open, loading, keyword, items}
   const [favUrls, setFavUrls] = useState(() => new Set());
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [aiName, setAiName] = useState('Jay AI');
   const [onlineSheet, setOnlineSheet] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [oneTime, setOneTime] = useState(false);
@@ -89,6 +97,18 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     loadStickerFavs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ---------- 官方群：读取 AI 展示名称（管理员可自定义） ---------- */
+  useEffect(() => {
+    if (!isOfficialGroup) return;
+    api.get('/api/ai/profile')
+      .then((d) => {
+        const n = d?.profile?.name;
+        if (n) setAiName(n);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOfficialGroup]);
 
   /** 把 @某人 插入输入框 */
   const insertMentionFor = (user) => {
@@ -220,6 +240,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       setText('');
       setReplyMsg(null);
       setTimeout(scrollToBottom, 40);
+      // 官方群里 @ Jay AI 提问：消息发出后再异步触发机器人回复（不阻塞发送）
+      if (isOfficialGroup && msgType === 'text' && mentionsAi(body, aiName)) {
+        api.post('/api/ai/ask', { groupId: Number(convId), question: body }).catch(() => {});
+      }
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -291,7 +315,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   const insertMention = () => {
-    setText((t) => t.replace(/(^|\s)@$/, (m, p) => `${p}@Jay AI `));
+    setText((t) => t.replace(/(^|\s)@$/, (m, p) => `${p}@${aiName} `));
     setMentionOpen(false);
   };
 
@@ -537,7 +561,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         <textarea
           className="chat-input"
           rows={1}
-          placeholder={group?.is_official ? '说点什么… 输入 @ 呼叫 Jay AI' : '说点什么…'}
+          placeholder={group?.is_official ? `说点什么… 输入 @ 呼叫 ${aiName}` : '说点什么…'}
           value={text}
           onChange={onInputChange}
           onKeyDown={(e) => {
@@ -562,7 +586,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
           <div className="glass pad" style={{ padding: 8 }}>
             <div className="menu-item" style={{ border: 'none', padding: '10px 8px' }} onClick={insertMention}>
               <Icon name="robot" size={20} strokeWidth={1.9} />
-              <span style={{ color: 'var(--ai)', fontWeight: 700 }}>Jay AI</span>
+              <span style={{ color: 'var(--ai)', fontWeight: 700 }}>{aiName}</span>
               <span className="chev" style={{ marginLeft: 'auto' }}>智能机器人</span>
             </div>
           </div>

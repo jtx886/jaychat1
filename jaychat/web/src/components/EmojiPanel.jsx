@@ -368,10 +368,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
           ) : sub === 'result' ? (
             renderGrid(results)
           ) : (
-            <>
-              <div className="hint" style={{ fontSize: 12 }}>把「{query}」合成成表情（参考微信），点击即可发送</div>
-              {renderGrid(composeItems)}
-            </>
+            renderGrid(composeItems)
           )}
         </>
       ) : null}
