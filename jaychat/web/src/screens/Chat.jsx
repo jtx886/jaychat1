@@ -220,16 +220,30 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     return 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isGroup, me?.username]);
-  const [mentionAck, setMentionAck] = useState(0);
+  /* 「有人@我」按钮的已处理标记：按会话持久化到本地。
+     点击后即使离开再进入也不再显示，直到对方再次 @ 我（新消息 id 更大）才重新出现。 */
+  const mentionAckKey = `jc_mention_ack_${convKey}`;
+  const readMentionAck = () => {
+    try {
+      return Number(localStorage.getItem(mentionAckKey)) || 0;
+    } catch {
+      return 0;
+    }
+  };
+  const [mentionAck, setMentionAck] = useState(readMentionAck);
   useEffect(() => {
-    setMentionAck(0);
+    setMentionAck(readMentionAck());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [convKey]);
   const lastMsgId = messages.length ? messages[messages.length - 1].id : 0;
-  const showMentionBtn = !!lastMentionId && lastMentionId !== lastMsgId && mentionAck !== lastMentionId;
+  const showMentionBtn = !!lastMentionId && lastMentionId !== lastMsgId && lastMentionId > mentionAck;
   const scrollToMention = () => {
     const el = rowRefs.current[lastMentionId];
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     setMentionAck(lastMentionId);
+    try {
+      localStorage.setItem(mentionAckKey, String(lastMentionId));
+    } catch {}
   };
 
   /** 消息预览文案（用于引用条 / 引用块） */
