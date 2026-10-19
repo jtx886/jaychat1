@@ -854,6 +854,17 @@ body {
 .at-me-btn:active { transform: scale(.96); }
 @keyframes atPop { from { opacity: 0; transform: translateY(6px) scale(.94); } to { opacity: 1; transform: none; } }
 
+/* 群聊已解散：底部提示条（替代输入框） */
+.chat-dissolved-bar {
+  padding: 12px 14px calc(14px + var(--safe-b)); border-top: 1px solid rgba(255, 255, 255, .07);
+  background: rgba(10, 13, 28, 0.72); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.chat-dissolved-text {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 700; color: var(--text-3);
+}
+
 .at-panel {
   margin: 0 10px 8px; border-radius: 20px; overflow: hidden;
   background: rgba(18, 22, 44, .96); border: 1px solid var(--glass-border-strong);

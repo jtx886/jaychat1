@@ -80,6 +80,8 @@ function jc_schema_tables()
                 array('owner_id', 'int', 'notnull'),
                 array('announcement', 'str:255', 'default:'),
                 array('is_official', 'int', 'default:0'),
+                // 解散标记：1=已解散（会话与历史消息保留，仅禁止发送新消息）
+                array('dissolved', 'int', 'default:0'),
                 array('im_groupid', 'str:64', 'default:'),
                 array('created_at', 'bigint', 'notnull'),
             ),

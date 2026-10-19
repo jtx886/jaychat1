@@ -51,6 +51,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const convKey = `${convType}_${convId}`;
   const isGroup = convType === 'group';
   const isOfficialGroup = isGroup && (isOfficial || group?.is_official);
+  const dissolved = isGroup && !!group?.dissolved; // 群已解散：只读，隐藏输入框
   const peerId = !isGroup ? Number(String(convId).split('_').find((x) => Number(x) !== me.id)) : 0;
 
   /* ---------- 初始化 ---------- */
@@ -280,6 +281,18 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     }
   };
 
+  /** 删除已解散的群聊会话（不再显示在首页） */
+  const deleteChat = async () => {
+    try {
+      await api.post(`/api/groups/${convId}/delete-chat`, {});
+      toast('已删除群聊');
+      await refreshConversations();
+      back();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
   /* ---------- 实时事件 ---------- */
   useEffect(() => {
     const offs = [];
@@ -323,6 +336,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     );
     offs.push(ws.on('group:members', (d) => d.groupId === Number(convId) && reloadGroup()));
     offs.push(ws.on('group:update', (d) => d.groupId === Number(convId) && reloadGroup()));
+    offs.push(ws.on('group:dissolved', (d) => {
+      if (d.groupId !== Number(convId)) return;
+      toast('该群聊已被群主解散');
+      reloadGroup();
+    }));
     offs.push(ws.on('group:muted', (d) => d.groupId === Number(convId) && toast(d.mute_until ? `你已被禁言 ${fmtDuration(d.mute_until - Date.now())}` : '你已被解除禁言')));
     return () => offs.forEach((o) => o());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -652,7 +670,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         )}
       </div>
 
-      {replyMsg ? (
+      {replyMsg && !dissolved ? (
         <div className="reply-bar">
           <div className="reply-bar-main">
             <div className="reply-bar-name">回复 {senderNameOf(replyMsg)}</div>
@@ -664,7 +682,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         </div>
       ) : null}
 
-      {showMentionBtn ? (
+      {showMentionBtn && !dissolved ? (
         <div className="at-me-bar">
           <button className="at-me-btn" onClick={scrollToMention}>
             <Icon name="bell" size={14} strokeWidth={1.9} /> 有人@我
@@ -672,40 +690,49 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         </div>
       ) : null}
 
-      <div className="chat-input-wrap">
-        <button className="icon-btn" onClick={() => setPanel(panel === 'emoji' ? null : 'emoji')} aria-label="表情">
-          <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
-            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-            <circle cx="9" cy="10" r="1.2" fill="currentColor" />
-            <circle cx="15" cy="10" r="1.2" fill="currentColor" />
-            <path d="M8.4 14.4c.9 1.3 2.1 2 3.6 2s2.7-.7 3.6-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-        </button>
-        <textarea
-          ref={inputRef}
-          className="chat-input"
-          rows={1}
-          placeholder={isOfficialGroup ? `说点什么… 输入 @ 呼叫 ${aiName}` : '说点什么…'}
-          value={text}
-          onChange={onInputChange}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !mentionOpen) {
-              e.preventDefault();
-              sendText(text);
-            }
-          }}
-        />
-        <button className="icon-btn" onClick={() => setPanel(panel === 'plus' ? null : 'plus')} aria-label="更多">
-          <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
-          </svg>
-        </button>
-        <button className="btn btn-primary" style={{ padding: '11px 16px' }} onClick={() => sendText(text)} disabled={!text.trim()}>
-          发送
-        </button>
-      </div>
+      {dissolved ? (
+        <div className="chat-dissolved-bar">
+          <div className="chat-dissolved-text">
+            <Icon name="bellOff" size={16} strokeWidth={1.9} /> 该群聊已解散
+          </div>
+          <button className="btn btn-sm btn-danger" onClick={deleteChat}>删除群聊</button>
+        </div>
+      ) : (
+        <div className="chat-input-wrap">
+          <button className="icon-btn" onClick={() => setPanel(panel === 'emoji' ? null : 'emoji')} aria-label="表情">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="9" cy="10" r="1.2" fill="currentColor" />
+              <circle cx="15" cy="10" r="1.2" fill="currentColor" />
+              <path d="M8.4 14.4c.9 1.3 2.1 2 3.6 2s2.7-.7 3.6-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+          <textarea
+            ref={inputRef}
+            className="chat-input"
+            rows={1}
+            placeholder={isOfficialGroup ? `说点什么… 输入 @ 呼叫 ${aiName}` : '说点什么…'}
+            value={text}
+            onChange={onInputChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !mentionOpen) {
+                e.preventDefault();
+                sendText(text);
+              }
+            }}
+          />
+          <button className="icon-btn" onClick={() => setPanel(panel === 'plus' ? null : 'plus')} aria-label="更多">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button className="btn btn-primary" style={{ padding: '11px 16px' }} onClick={() => sendText(text)} disabled={!text.trim()}>
+            发送
+          </button>
+        </div>
+      )}
 
-      {mentionOpen ? (
+      {mentionOpen && !dissolved ? (
         <div className="at-panel">
           <div className="at-search">
             <Icon name="search" size={15} strokeWidth={1.9} />

@@ -211,6 +211,7 @@ route('GET', '#^/api/conversations$#', function ($params, $body) {
             'name' => (string) $g['name'],
             'avatar' => isset($g['avatar']) ? (string) $g['avatar'] : '',
             'is_official' => !empty($g['is_official']),
+            'dissolved' => !empty($g['dissolved']),
             'dnd' => !empty($g['dnd']),
             'member_count' => count($members),
             'online_count' => $online,
@@ -431,6 +432,10 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
 
     if ($convType === 'group') {
         $gid = (int) $convId;
+        $grp = db_one('SELECT `dissolved` FROM `groups` WHERE `id` = ?', array($gid));
+        if ($grp && !empty($grp['dissolved'])) {
+            return array(403, array('error' => '该群聊已解散，无法发送消息'));
+        }
         $me = db_one('SELECT `mute_until` FROM `group_members` WHERE `group_id` = ? AND `user_id` = ?', array($gid, $uid));
         if ($me && (int) $me['mute_until'] && (int) $me['mute_until'] > now_ms()) {
             return array(403, array('error' => '你已被禁言，剩余 ' . (int) ceil(((int) $me['mute_until'] - now_ms()) / 1000) . ' 秒'));

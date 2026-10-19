@@ -145,6 +145,17 @@ export default function GroupInfoScreen({ groupId }) {
     }
   };
 
+  const dissolve = async () => {
+    try {
+      await api.post(`/api/groups/${groupId}/dissolve`, {});
+      toast('群聊已解散');
+      await refreshConversations();
+      back();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="page" style={{ height: '100%' }}>
@@ -166,6 +177,7 @@ export default function GroupInfoScreen({ groupId }) {
               <div style={{ fontSize: 19, fontWeight: 800 }}>
                 {group.name}
                 {group.is_official ? <span className="badge-soft" style={{ marginLeft: 8 }}>官方群</span> : null}
+                {group.dissolved ? <span className="badge-soft" style={{ marginLeft: 8 }}>已解散</span> : null}
               </div>
               <div className="hint" style={{ marginTop: 4 }}>
                 群主：{group.owner?.username} · 我的身份：
@@ -177,7 +189,7 @@ export default function GroupInfoScreen({ groupId }) {
             </div>
           </div>
 
-          {can.edit ? (
+          {can.edit && !group.dissolved ? (
             <div className="flex gap8" style={{ marginTop: 14 }}>
               <button className="btn btn-sm btn-ghost grow" onClick={() => setSheet('editName')}>修改群名称</button>
               <button className="btn btn-sm btn-ghost grow" onClick={() => setSheet('editAvatar')}>更换群头像</button>
@@ -186,12 +198,12 @@ export default function GroupInfoScreen({ groupId }) {
 
           <div className="glass pad" style={{ marginTop: 14, borderRadius: 14 }}>
             <div className="hint" style={{ fontWeight: 700, color: 'var(--text-2)', marginBottom: 6 }}>群公告</div>
-            {can.edit ? (
+            {can.edit && !group.dissolved ? (
               <textarea className="input" rows={2} value={annDraft} onChange={(e) => setAnnDraft(e.target.value)} placeholder="填写群公告" />
             ) : (
               <div className="small">{group.announcement || '暂无公告'}</div>
             )}
-            {can.edit ? (
+            {can.edit && !group.dissolved ? (
               <button className="btn btn-sm btn-primary mt" style={{ marginTop: 8 }} onClick={() => patchGroup({ announcement: annDraft })}>保存公告</button>
             ) : null}
           </div>
@@ -264,13 +276,21 @@ export default function GroupInfoScreen({ groupId }) {
           </div>
         </div>
 
-        <div className="mx mt" style={{ marginTop: 18 }}>
+        <div className="mx mt" style={{ marginTop: 18, display: 'grid', gap: 10 }}>
           {group.is_official ? (
             <div className="hint center">官方群不支持退出，由官方账号「杰同学」管理</div>
-          ) : can.quit ? (
-            <button className="btn btn-block btn-danger" onClick={quit}>退出群聊</button>
           ) : (
-            <div className="hint center">群主需先转让群主后才能退出</div>
+            <>
+              {group.dissolved ? <div className="hint center">该群聊已解散，仅可查看历史消息</div> : null}
+              {can.dissolve ? (
+                <button className="btn btn-block btn-danger" onClick={() => setSheet('dissolve')}>解散群聊</button>
+              ) : null}
+              {can.quit ? (
+                <button className="btn btn-block btn-danger" onClick={quit}>退出群聊</button>
+              ) : can.dissolve ? null : (
+                <div className="hint center">群主需先转让群主后才能退出</div>
+              )}
+            </>
           )}
         </div>
         <div style={{ height: 20 }} />
@@ -341,6 +361,14 @@ export default function GroupInfoScreen({ groupId }) {
           <input className="input" type="number" min="1" placeholder="例如 30" value={muteCustom} onChange={(e) => setMuteCustom(e.target.value)} />
         </div>
         <button className="btn btn-primary btn-block" onClick={applyMute}>确认禁言</button>
+      </Sheet>
+
+      {/* 解散群聊确认 */}
+      <Sheet open={sheet === 'dissolve'} onClose={() => setSheet(null)} title="解散群聊">
+        <div className="hint" style={{ marginBottom: 12 }}>
+          解散后该群聊将无法再发送消息，首页仍会保留该会话，成员可自行删除。此操作不可恢复。
+        </div>
+        <button className="btn btn-block btn-danger" onClick={dissolve}>确认解散</button>
       </Sheet>
 
       {/* 成员操作 */}

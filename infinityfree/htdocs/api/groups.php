@@ -30,6 +30,7 @@ function group_brief($g, $uid)
         'owner_id' => (int) $g['owner_id'],
         'announcement' => isset($g['announcement']) ? (string) $g['announcement'] : '',
         'is_official' => !empty($g['is_official']),
+        'dissolved' => !empty($g['dissolved']),
         'im_groupid' => isset($g['im_groupid']) ? (string) $g['im_groupid'] : '',
         'member_count' => count($members),
         'online_count' => $online,
@@ -155,6 +156,8 @@ route('GET', '#^/api/groups/(\d+)$#', function ($params, $body) {
             'transfer' => ($role === 'owner'),
             'invite' => true,
             'quit' => (!empty($g['is_official']) ? false : ($role !== 'owner')),
+            // 解散：仅群主、且非官方群、且当前未解散
+            'dissolve' => ($role === 'owner' && empty($g['is_official']) && empty($g['dissolved'])),
         ),
     ));
 });
@@ -360,4 +363,49 @@ route('PATCH', '#^/api/groups/(\d+)/dnd$#', function ($params, $body) {
     $dnd = !empty($body['dnd']) ? 1 : 0;
     db_run('UPDATE `group_members` SET `dnd` = ? WHERE `group_id` = ? AND `user_id` = ?', array($dnd, $gid, $uid));
     return array(200, array('ok' => true, 'dnd' => (bool) $dnd));
+});
+
+// 解散群聊（仅群主；官方群不允许）
+// 解散后：群与成员关系保留，首页仍显示该会话，成员可只读历史消息，但不能再发消息。
+route('POST', '#^/api/groups/(\d+)/dissolve$#', function ($params, $body) {
+    $uid = require_auth();
+    $gid = (int) $params[0];
+    $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
+    if (!$g) {
+        return array(404, array('error' => '群聊不存在'));
+    }
+    if (!empty($g['is_official'])) {
+        return array(400, array('error' => '官方群不能解散'));
+    }
+    if ((int) $g['owner_id'] !== (int) $uid) {
+        return array(403, array('error' => '只有群主可以解散群聊'));
+    }
+    if (!empty($g['dissolved'])) {
+        return array(400, array('error' => '群聊已解散'));
+    }
+    db_run('UPDATE `groups` SET `dissolved` = 1 WHERE `id` = ?', array($gid));
+    $g2 = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
+    $brief = group_brief($g2, $uid);
+    event_to_group_members($gid, 'group:dissolved', array('groupId' => $gid, 'group' => $brief));
+    event_to_group_members($gid, 'group:update', array('groupId' => $gid, 'group' => $brief));
+    return array(200, array('ok' => true));
+});
+
+// 删除已解散的群聊（仅移除自己的会话，不再显示在首页；历史消息保留在服务端）
+route('POST', '#^/api/groups/(\d+)/delete-chat$#', function ($params, $body) {
+    $uid = require_auth();
+    $gid = (int) $params[0];
+    $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
+    if (!$g) {
+        return array(404, array('error' => '群聊不存在'));
+    }
+    if (empty($g['dissolved'])) {
+        return array(400, array('error' => '群聊尚未解散'));
+    }
+    if (!member_role($gid, $uid)) {
+        return array(400, array('error' => '你不在该群聊中'));
+    }
+    db_run('DELETE FROM `group_members` WHERE `group_id` = ? AND `user_id` = ?', array($gid, $uid));
+    event_to_group_members($gid, 'group:members', array('groupId' => $gid, 'group' => group_brief($g, $uid)));
+    return array(200, array('ok' => true));
 });

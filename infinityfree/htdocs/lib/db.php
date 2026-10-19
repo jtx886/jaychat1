@@ -182,6 +182,7 @@ function db_install()
         // 轻量迁移：老库补齐新列
         try {
             db_ensure_column('groups', 'im_groupid', "`im_groupid` VARCHAR(64) DEFAULT ''");
+            db_ensure_column('groups', 'dissolved', '`dissolved` INT DEFAULT 0');
         } catch (Exception $e) {
         }
         try {
