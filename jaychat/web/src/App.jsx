@@ -3,7 +3,6 @@ import { api, tokenStore, ws, setBase, getBase, isNative } from './api.js';
 import { ToastHost, toast, Spinner, LogoSvg } from './components/ui.jsx';
 import UserSheet from './components/UserSheet.jsx';
 import { ensureNotificationPermission, pushNotification, createChannel } from './lib/notify.js';
-import { loginIM, logoutIM } from './lib/im.js';
 
 import AuthScreen from './screens/Auth.jsx';
 import MainShell from './screens/MainShell.jsx';
@@ -37,7 +36,6 @@ export default function App() {
   const [notifyUnread, setNotifyUnread] = useState(0);
   const [reqCount, setReqCount] = useState(0);
   const [wsStatus, setWsStatus] = useState('idle');
-  const [imStatus, setImStatus] = useState('idle');
   const [sheetUser, setSheetUser] = useState(null);
   const openConvRef = useRef(null);
   const bootingRef = useRef(false);
@@ -60,8 +58,6 @@ export default function App() {
       }
       setBooted(true);
       createChannel();
-      // 登录腾讯云 IM，建立跨网络实时接收通道
-      if (tokenStore.get()) loginIM().catch((e) => console.warn('[im] 登录失败', e?.message || e));
     })();
   }, []);
 
@@ -116,7 +112,6 @@ export default function App() {
   useEffect(() => {
     const offs = [];
     offs.push(ws.on('__status', (s) => setWsStatus(s)));
-    offs.push(ws.on('__imstatus', (s) => setImStatus(s)));
     offs.push(
       ws.on('presence', (d) => setPresence((p) => ({ ...p, [d.userId]: d.online }))),
     );
@@ -137,7 +132,7 @@ export default function App() {
 
     offs.push(
       ws.on('message', (m) => {
-        // 同一条消息可能同时经本地 WebSocket 与腾讯云 IM 到达，做一次去重
+        // 轮询/WebSocket 可能重复投递同一条消息，做一次去重
         const seen = seenMsgRef.current;
         if (m && seen.has(m.id)) return;
         if (m) {
@@ -243,7 +238,6 @@ export default function App() {
     try {
       await api.post('/api/auth/logout', {});
     } catch {}
-    logoutIM().catch(() => {});
     tokenStore.clear();
     ws.close();
     seenMsgRef.current.clear();
@@ -262,7 +256,6 @@ export default function App() {
       setMe(user);
       seenMsgRef.current.clear();
       ws.connect();
-      loginIM().catch((e) => console.warn('[im] 登录失败', e?.message || e));
       await refreshConversations();
       await refreshBadges();
     },
@@ -280,10 +273,10 @@ export default function App() {
       presence, setPresence,
       conversations, refreshConversations, totalUnread, officialGroupId,
       notifyUnread, setNotifyUnread, reqCount, refreshBadges,
-      wsStatus, imStatus, openConvRef, setBase, getBase,
+      wsStatus, openConvRef, setBase, getBase,
       route: stack[stack.length - 1], stack, push, back, reset, openUser,
     }),
-    [me, booted, presence, conversations, totalUnread, officialGroupId, notifyUnread, reqCount, wsStatus, imStatus, stack, push, back, reset, openUser, login, logout, setUser, refreshConversations, refreshBadges],
+    [me, booted, presence, conversations, totalUnread, officialGroupId, notifyUnread, reqCount, wsStatus, stack, push, back, reset, openUser, login, logout, setUser, refreshConversations, refreshBadges],
   );
 
   if (!booted) {

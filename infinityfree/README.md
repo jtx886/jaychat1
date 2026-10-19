@@ -78,6 +78,6 @@ DB_DRIVER=sqlite DB_PATH=/tmp/jc/jaychat.db JWT_SECRET=dev \
 ## 五、与完整版的差异（受免费主机限制）
 
 - **邮件验证码**：免费主机无 SMTP，`send-code` 不真正发信；开启 `ALLOW_DEV_CODE` 时把验证码随响应回传（字段 `devCode`）。
-- **腾讯云 IM / AI**：未集成对应云服务的部署会返回明确错误，不影响基础聊天功能。
+- **AI**：未配置 AI 服务的部署会返回明确错误，不影响基础聊天功能。
 - **上传上限**：单文件 10MB（InfinityFree 限制），已同步到 `UPLOAD_MAX_BYTES`。
 - **无 cron / 无常驻进程**：所有清理、状态更新均按请求触发。

@@ -7,12 +7,12 @@ import { shortTime } from '../lib/time.js';
 
 export default function HomeScreen() {
   const app = useApp();
-  const { conversations, notifyUnread, push, me, wsStatus, imStatus, refreshConversations } = app;
+  const { conversations, notifyUnread, push, me, wsStatus, refreshConversations } = app;
   const [menuOpen, setMenuOpen] = useState(false);
   const [convMenu, setConvMenu] = useState(null); // 当前长按的会话
   const [pressKey, setPressKey] = useState('');
   const press = useRef({ timer: null, fired: false });
-  const live = wsStatus === 'open' || imStatus === 'open';
+  const live = wsStatus === 'open';
 
   const startPress = (c) => {
     press.current.fired = false;

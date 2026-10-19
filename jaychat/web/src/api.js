@@ -26,7 +26,7 @@ export function setBase(url) {
   const v = String(url || '').trim().replace(/\/$/, '');
   if (v) localStorage.setItem(LS_SERVER, v);
   else localStorage.removeItem(LS_SERVER);
-  ws.close();
+  ws.reset();
   ws.connect();
 }
 
@@ -121,6 +121,8 @@ class Realtime {
     this.status = 'idle';
     this.mode = 'ws'; // ws | poll
     this.cursor = 0;
+    this.polling = false; // 轮询循环是否已启动（避免重复 connect 起出多条轮询循环）
+    this.pollCapable = null; // null=未探测 | 'yes'=后端支持轮询 | 'no'=后端无轮询（走 WebSocket）
   }
   on(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -136,10 +138,21 @@ class Realtime {
       }
     });
   }
-  connect() {
+  async connect() {
     const token = tokenStore.get();
     if (!token) return;
     if (this.mode === 'poll') return this.startPoll();
+    // 先探测后端实时能力：PHP 版没有 WebSocket，可直接走轮询，不必空等 WS 重连
+    if (this.pollCapable !== 'no') {
+      const probe = this.pollCapable === 'yes' ? 'yes' : await this.probePoll();
+      if (probe === 'yes') {
+        this.pollCapable = 'yes';
+        return this.startPoll();
+      }
+      if (probe === 'no') this.pollCapable = 'no';
+      // 'unknown'：服务器暂不可达，继续尝试 WebSocket，由重连逻辑稍后再探测
+    }
+    if (!tokenStore.get()) return;
     const base = getBase();
     const url = (base || window.location.origin).replace(/^http/, 'ws') + '/ws?token=' + encodeURIComponent(token);
     this.close();
@@ -172,16 +185,27 @@ class Realtime {
     };
     this.ws.onerror = () => {};
   }
-  /** 探测后端是否提供 /api/poll（PHP 版后端没有 WebSocket，用它判断能否降级） */
+  /**
+   * 探测后端实时能力：
+   *   'yes'     —— 提供 /api/poll（PHP / InfinityFree 版），可直接走轮询
+   *   'no'      —— 服务器有响应但没有轮询接口（Node 版），走 WebSocket
+   *   'unknown' —— 未拿到 HTTP 响应（网络异常），稍后重试
+   */
   async probePoll() {
     try {
       const d = await http('/api/poll', { timeout: 8000 });
-      return !!(d && typeof d.cursor === 'number');
-    } catch {
-      return false;
+      if (d && typeof d.cursor === 'number') {
+        this.cursor = d.cursor;
+        return 'yes';
+      }
+      return 'no';
+    } catch (e) {
+      return e && e.status ? 'no' : 'unknown';
     }
   }
   startPoll() {
+    if (this.polling) return;
+    this.polling = true;
     this.mode = 'poll';
     this.status = 'open';
     this.emit('__status', 'open');
@@ -205,14 +229,10 @@ class Realtime {
     if (this.timer) return;
     this.retry = Math.min(this.retry + 1, 8);
     const delay = Math.min(1000 * this.retry, 6000);
-    this.timer = setTimeout(async () => {
+    this.timer = setTimeout(() => {
       this.timer = null;
       if (!tokenStore.get()) return;
-      // WebSocket 连不上（如 PHP 主机）且后端提供轮询接口 → 永久降级为轮询
-      if (this.retry >= 2 && this.mode === 'ws' && (await this.probePoll())) {
-        this.retry = 0;
-        return this.startPoll();
-      }
+      // connect() 内部会重新探测后端能力：能轮询就直接降级，否则继续连 WebSocket
       this.connect();
     }, delay);
   }
@@ -233,6 +253,7 @@ class Realtime {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    this.polling = false;
     if (this.ws) {
       this.ws.onclose = null;
       try {
@@ -240,6 +261,16 @@ class Realtime {
       } catch {}
       this.ws = null;
     }
+  }
+  /** 重置连接状态（切换服务器地址时调用，下次 connect() 会重新探测后端能力） */
+  reset() {
+    this.close();
+    this.mode = 'ws';
+    this.cursor = 0;
+    this.pollCapable = null;
+    this.retry = 0;
+    this.queue = [];
+    this.status = 'idle';
   }
 }
 

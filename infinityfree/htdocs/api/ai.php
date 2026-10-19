@@ -1,14 +1,7 @@
 <?php
 /**
- * /api/im/usersig  —— InfinityFree 上不启用腾讯云 IM，做优雅降级桩
- * /api/ai/ask      —— 官方群 @Jay AI 提问（前端 fire-and-forget 调用）
+ * /api/ai/ask —— 官方群 @Jay AI 提问（前端 fire-and-forget 调用）
  */
-
-// 腾讯云 IM 登录票据：当前部署未启用
-route('GET', '#^/api/im/usersig$#', function ($params, $body) {
-    require_auth();
-    return array(400, array('error' => '当前部署未启用腾讯云 IM'));
-});
 
 /** Jay AI 人格设定 */
 function jc_ai_system_prompt()
