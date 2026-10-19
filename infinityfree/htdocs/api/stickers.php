@@ -55,15 +55,23 @@ route('GET', '#^/api/stickers/search$#', function ($params, $body) {
     if ($q === '') {
         return array(400, array('error' => '请输入搜索关键词'));
     }
-    $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 24;
-    if ($limit < 1 || $limit > 48) {
-        $limit = 24;
+    $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    if ($page < 1) {
+        $page = 1;
     }
-    $items = jc_soogif_search(mb_substr($q, 0, 24, 'UTF-8'), $limit);
-    if ($items === null) {
-        return array(502, array('error' => '表情资源获取失败，请稍后重试'));
+    $base = isset($_GET['base']) ? trim((string) $_GET['base']) : '';
+    $r = jc_soogif_page(mb_substr($q, 0, 24, 'UTF-8'), $page, $base);
+    if (empty($r['ok'])) {
+        return array(502, array('error' => isset($r['error']) ? $r['error'] : '表情资源获取失败，请稍后重试'));
     }
-    return array(200, array('items' => $items, 'keyword' => $q));
+    return array(200, array(
+        'items' => $r['items'],
+        'keyword' => $q,
+        'page' => (int) $r['page'],
+        'max_page' => (int) $r['max_page'],
+        'base' => (string) $r['base'],
+        'total' => (int) $r['total'],
+    ));
 });
 
 /* ------------------------------ 相关表情 ------------------------------ */

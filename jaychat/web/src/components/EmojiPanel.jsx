@@ -146,6 +146,11 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
   const [sub, setSub] = useState('result'); // result | compose
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0); // 已加载到第几页（soogif 分页）
+  const [maxPage, setMaxPage] = useState(1); // 该关键词的总页数
+  const [base, setBase] = useState(''); // soogif 规范化列表页 slug/ID
+  const [total, setTotal] = useState(0); // 该关键词的结果总数
+  const [moreLoading, setMoreLoading] = useState(false);
   const [favs, setFavs] = useState([]);
   const [menu, setMenu] = useState(null);
   const [related, setRelated] = useState(null); // {open, loading, keyword, items}
@@ -165,7 +170,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
     loadFavs();
   }, [loadFavs]);
 
-  /* ---------- 搜索 ---------- */
+  /* ---------- 搜索（分页拉取，与 soogif 网站结果条数一致） ---------- */
   const doSearch = async (kw) => {
     const q = String(kw ?? input ?? '').trim();
     if (!q) {
@@ -176,15 +181,54 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
     setInput(q);
     setSub('result');
     setLoading(true);
+    setResults([]);
+    setPage(0);
+    setMaxPage(1);
+    setBase('');
+    setTotal(0);
     try {
       const d = await api.get(`/api/stickers/search?q=${encodeURIComponent(q)}`);
       setResults(d.items || []);
+      setPage(d.page || 1);
+      setMaxPage(d.max_page || 1);
+      setBase(d.base || '');
+      setTotal(d.total || 0);
     } catch (e) {
       toast(e.message, 'error');
       setResults([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const hasMore = page > 0 && page < maxPage;
+
+  /** 滚动到底部时自动加载下一页 */
+  const loadMore = useCallback(async () => {
+    if (moreLoading || loading || !query || page < 1 || page >= maxPage) return;
+    setMoreLoading(true);
+    try {
+      const d = await api.get(
+        `/api/stickers/search?q=${encodeURIComponent(query)}&page=${page + 1}&base=${encodeURIComponent(base)}`,
+      );
+      setResults((list) => {
+        const seen = new Set(list.map((x) => x.id));
+        return list.concat((d.items || []).filter((x) => !seen.has(x.id)));
+      });
+      setPage(d.page || page + 1);
+      setMaxPage(d.max_page || maxPage);
+      if (d.base) setBase(d.base);
+      if (d.total) setTotal(d.total);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setMoreLoading(false);
+    }
+  }, [moreLoading, loading, query, page, maxPage, base]);
+
+  const onGridScroll = (e) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) loadMore();
   };
 
   /* ---------- 发送 ---------- */
@@ -262,22 +306,25 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
     return acts;
   };
 
-  const renderGrid = (items) => {
+  const renderGrid = (items, opts = {}) => {
     if (!items.length) {
-      return <div className="hint center" style={{ padding: '26px 0' }}>没有找到相关表情</div>;
+      return <div className="hint center" style={{ padding: '26px 0' }}>{opts.emptyHint || '没有找到相关表情'}</div>;
     }
     return (
-      <div className="emoji-grid anim">
-        {items.map((it) => (
-          <StickerTile
-            key={it.id}
-            item={it}
-            isFav={it.url ? favUrls.has(it.url) : false}
-            onSend={sendItem}
-            onMenu={setMenu}
-          />
-        ))}
-      </div>
+      <>
+        <div className="emoji-grid anim" onScroll={opts.onScroll}>
+          {items.map((it) => (
+            <StickerTile
+              key={it.id}
+              item={it}
+              isFav={it.url ? favUrls.has(it.url) : false}
+              onSend={sendItem}
+              onMenu={setMenu}
+            />
+          ))}
+        </div>
+        {opts.footer || null}
+      </>
     );
   };
 
@@ -366,7 +413,23 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
               输入关键词搜索，即可看到「结果」与「合成」两类表情
             </div>
           ) : sub === 'result' ? (
-            renderGrid(results)
+            <>
+              <div className="hint" style={{ marginTop: -2 }}>
+                已加载 {results.length} 张{total ? ` · 共 ${total} 张` : ''}
+                {hasMore ? ' · 下滑加载更多' : ''}
+              </div>
+              {renderGrid(results, {
+                emptyHint: '没有找到相关表情',
+                onScroll: onGridScroll,
+                footer: moreLoading ? (
+                  <div className="center" style={{ padding: '10px 0' }}>
+                    <Spinner size={18} />
+                  </div>
+                ) : !hasMore && results.length ? (
+                  <div className="hint center" style={{ padding: '10px 0' }}>已加载全部</div>
+                ) : null,
+              })}
+            </>
           ) : (
             renderGrid(composeItems)
           )}

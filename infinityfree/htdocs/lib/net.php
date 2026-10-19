@@ -133,23 +133,15 @@ function jc_ai_chat($messages)
 }
 
 /**
- * soogif 表情包搜索：抓取服务端渲染的搜索结果页并解析直链。
- * 返回 array 表示成功（可能为空数组）；返回 null 表示抓取失败。
+ * 解析 soogif 列表页 HTML。
+ * 返回 array(items, base, max_page, total)：
+ *   items    表情直链数组
+ *   base     规范化列表页 slug/ID（用于拼后续分页地址）
+ *   max_page 总页数（从分页器解析，例如 657）
+ *   total    该关键词的结果总数（“共为您找到 N 张”）
  */
-function jc_soogif_search($kw, $limit = 24)
+function jc_soogif_parse($html)
 {
-    $kw = trim((string) $kw);
-    if ($kw === '') {
-        return array();
-    }
-    $limit = max(1, min(48, (int) $limit));
-    $url = 'https://www.soogif.com/search/' . rawurlencode($kw);
-    $r = jc_http_request('GET', $url, array('timeout' => 15));
-    if (!$r['ok'] || $r['body'] === '') {
-        return null;
-    }
-    $html = $r['body'];
-
     $out = array();
     $seen = array();
     if (preg_match_all('#<img[^>]*class="lazy"[^>]*>#i', $html, $mm)) {
@@ -178,10 +170,98 @@ function jc_soogif_search($kw, $limit = 24)
             }
             $seen[$key] = true;
             $out[] = array('id' => $key, 'url' => $gif, 'thumb' => $thumb, 'label' => $label);
-            if (count($out) >= $limit) {
-                break;
+        }
+    }
+
+    // 分页器：形如 href="744045-2-0-0.html"，其中 744045 为 base、2 为页码
+    $base = '';
+    $maxPage = 1;
+    if (preg_match_all('#([A-Za-z0-9]+)-(\d+)-0-0\.html#', $html, $pm, PREG_SET_ORDER)) {
+        foreach ($pm as $m) {
+            if ($base === '') {
+                $base = $m[1];
+            }
+            $n = (int) $m[2];
+            if ($n > $maxPage) {
+                $maxPage = $n;
             }
         }
     }
-    return $out;
+
+    $total = 0;
+    if (preg_match('#共为您找到(\d+)张#u', $html, $tm)) {
+        $total = (int) $tm[1];
+    }
+
+    return array('items' => $out, 'base' => $base, 'max_page' => $maxPage, 'total' => $total);
+}
+
+/** 抓取失败的友好提示 */
+function jc_soogif_error($r)
+{
+    if ((int) $r['status'] === 429) {
+        return '表情网站请求过于频繁，请稍后再试';
+    }
+    return '表情资源获取失败，请稍后重试';
+}
+
+/**
+ * 抓取 soogif 搜索结果的第 $page 页（每页约 19~20 张）。
+ * - page<=1：请求 /search/<kw>（会 301 到规范化列表页）
+ * - page>1 ：请求 /gif/<base>-<page>-0-0.html（need base，缺失时先解析一次）
+ * 返回 array(ok, items, base, page, max_page, total, error)
+ */
+function jc_soogif_page($kw, $page = 1, $base = '')
+{
+    $kw = trim((string) $kw);
+    if ($kw === '') {
+        return array('ok' => false, 'error' => '关键词为空');
+    }
+    $page = max(1, (int) $page);
+    $base = trim((string) $base);
+
+    if ($page <= 1) {
+        $url = 'https://www.soogif.com/search/' . rawurlencode($kw);
+    } else {
+        if ($base === '') {
+            // 先解析一次规范化地址，才能拼分页链接
+            $r0 = jc_http_request('GET', 'https://www.soogif.com/search/' . rawurlencode($kw), array('timeout' => 20));
+            if (!$r0['ok'] || $r0['body'] === '') {
+                return array('ok' => false, 'error' => jc_soogif_error($r0));
+            }
+            $p0 = jc_soogif_parse($r0['body']);
+            $base = $p0['base'];
+        }
+        if ($base === '') {
+            return array('ok' => true, 'items' => array(), 'base' => '', 'page' => $page, 'max_page' => $page, 'total' => 0);
+        }
+        $url = 'https://www.soogif.com/gif/' . $base . '-' . $page . '-0-0.html';
+    }
+
+    $r = jc_http_request('GET', $url, array('timeout' => 20));
+    if (!$r['ok'] || $r['body'] === '') {
+        return array('ok' => false, 'error' => jc_soogif_error($r));
+    }
+    $p = jc_soogif_parse($r['body']);
+    return array(
+        'ok' => true,
+        'items' => $p['items'],
+        'base' => ($base !== '' ? $base : $p['base']),
+        'page' => $page,
+        'max_page' => max(1, (int) $p['max_page']),
+        'total' => (int) $p['total'],
+    );
+}
+
+/**
+ * 兼容旧接口：取第 1 页并截断到 $limit 条（用于「相关表情」）。
+ * 返回 array 表示成功（可能为空数组）；返回 null 表示抓取失败。
+ */
+function jc_soogif_search($kw, $limit = 24)
+{
+    $r = jc_soogif_page($kw, 1);
+    if (empty($r['ok'])) {
+        return null;
+    }
+    return array_slice($r['items'], 0, max(1, (int) $limit));
 }

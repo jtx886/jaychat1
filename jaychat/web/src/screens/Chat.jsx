@@ -393,25 +393,28 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     const quote = m.extra?.reply || null;
     const rl = readLabel(m);
     const canAt = isGroup && !mine && !!senderName;
+    // 图片 / 视频 / 动画表情：不用气泡包裹（与微信一致，消息本体直接展示）
+    const isMedia = m.msg_type === 'image' || m.msg_type === 'video' || m.msg_type === 'sticker';
+    const plain = isMedia && !quote && !m.recalled && !m.burned;
+    const bubbleClass =
+      'bubble' + (isAI ? ' bubble-ai' : '') + (plain ? ' plain' : '') + (m.recalled ? ' recalled' : '');
 
     return (
       <div key={m.id} className={'msg-row' + (mine ? ' mine' : '')}>
-        {!mine ? (
-          <span
-            className={canAt ? 'avatar-at' : undefined}
-            title={canAt ? '长按可 @ 对方' : undefined}
-            {...avatarMentionHandlers({ username: senderName, id: m.sender?.id }, canAt)}
-          >
-            <Avatar
-              user={isAI ? { id: 0, username: senderName, avatar: m.sender?.avatar || '' } : m.sender}
-              name={senderName}
-              size={38}
-              showOnline={!isAI}
-              onClick={!isAI && m.sender?.id ? () => app.openUser(m.sender) : undefined}
-            />
-          </span>
-        ) : null}
-        <div style={{ maxWidth: '78%', minWidth: 0 }}>
+        <span
+          className={canAt ? 'avatar-at' : undefined}
+          title={canAt ? '长按可 @ 对方' : undefined}
+          {...avatarMentionHandlers({ username: senderName, id: m.sender?.id }, canAt)}
+        >
+          <Avatar
+            user={mine ? me : isAI ? { id: 0, username: senderName, avatar: m.sender?.avatar || '' } : m.sender}
+            name={mine ? me.username : senderName}
+            size={38}
+            showOnline={!mine && !isAI}
+            onClick={!mine && !isAI && m.sender?.id ? () => app.openUser(m.sender) : undefined}
+          />
+        </span>
+        <div className="msg-body">
           {isGroup && !mine ? (
             <div className="sender-name" style={isAI ? { color: 'var(--ai)', fontWeight: 700 } : undefined}>
               {isAI ? (
@@ -422,7 +425,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             </div>
           ) : null}
           <div
-            className={'bubble' + (isAI ? ' bubble-ai' : '') + (m.recalled ? ' recalled' : '')}
+            className={bubbleClass}
             onContextMenu={(e) => {
               e.preventDefault();
               if (m.recalled) return;
@@ -481,15 +484,15 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             ) : (
               <span>{m.content}</span>
             )}
-            <div className="bubble-meta">
-              {m.one_time && !m.recalled ? (
-                <span className="one-time-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Icon name="flame" size={11} filled /> 一次性
-                </span>
-              ) : null}
-              <span className="mono-num">{bubbleTime(m.created_at)}</span>
-              {rl ? <span className={'talk-badge ' + (rl.read ? 'read' : 'unread')}>{rl.text}</span> : null}
-            </div>
+          </div>
+          <div className="bubble-meta">
+            {m.one_time && !m.recalled ? (
+              <span className="one-time-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon name="flame" size={11} filled /> 一次性
+              </span>
+            ) : null}
+            <span className="mono-num">{bubbleTime(m.created_at)}</span>
+            {rl ? <span className={'talk-badge ' + (rl.read ? 'read' : 'unread')}>{rl.text}</span> : null}
           </div>
         </div>
       </div>
