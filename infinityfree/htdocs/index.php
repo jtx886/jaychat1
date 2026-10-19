@@ -81,6 +81,29 @@ $isApi = ($path === '/api' || strpos($path, '/api/') === 0);
 
 /* ------------------------------ API 分发 ------------------------------ */
 if ($isApi) {
+    /**
+     * 兜底：若发生无法捕获的致命错误（E_ERROR / E_PARSE / 内存耗尽等），
+     * 也要输出可读 JSON，绝不再返回空白 500，方便定位问题。
+     */
+    register_shutdown_function(function () {
+        $e = error_get_last();
+        if (!$e) {
+            return;
+        }
+        $fatal = array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR);
+        if (!in_array($e['type'], $fatal, true)) {
+            return;
+        }
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(array(
+            'error' => '服务器致命错误：' . $e['message'],
+            'at' => basename((string) $e['file']) . ':' . (int) $e['line'],
+        ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    });
+
     // 数据库初始化（建表 + 种子数据）。失败时必须给出明确提示，而不是空白 500。
     $bootError = null;
     try {
