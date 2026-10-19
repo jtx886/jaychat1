@@ -301,6 +301,14 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         if (`${m.conv_type}_${m.conv_id}` !== convKey) return;
         setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
         setTimeout(scrollToBottom, 40);
+        // 我正停留在该会话页面，对方此时 @ 我：直接记为已处理，
+        // 避免我随后发言（使 @ 消息不再是最后一条）后又弹出「有人@我」按钮
+        if (mentionMe(m)) {
+          setMentionAck(m.id);
+          try {
+            localStorage.setItem(mentionAckKey, String(m.id));
+          } catch {}
+        }
         if (m.sender_id !== me.id) {
           // 正在会话内查看：立即标记已读并刷新会话列表，避免返回首页仍显示红点
           api.post(`/api/messages/${m.id}/read`, {}).then(() => refreshConversations()).catch(() => {});
