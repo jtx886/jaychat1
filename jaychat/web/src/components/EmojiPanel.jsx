@@ -154,6 +154,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
   const [favs, setFavs] = useState([]);
   const [menu, setMenu] = useState(null);
   const [related, setRelated] = useState(null); // {open, loading, keyword, items}
+  const moreAtRef = useRef(0); // 「加载更多」冷却时间戳，避免高频触发
 
   const favUrls = useMemo(() => new Set(favs.map((f) => f.url)), [favs]);
   const current = EMOJI_CATEGORIES.find((c) => c.key === cat) || EMOJI_CATEGORIES[0];
@@ -228,7 +229,12 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
 
   const onGridScroll = (e) => {
     const el = e.currentTarget;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) loadMore();
+    // 距底部不足时才考虑加载，且加冷却，避免滚动时高频触发「加载更多」
+    if (el.scrollHeight - el.scrollTop - el.clientHeight > 320) return;
+    const now = Date.now();
+    if (now - moreAtRef.current < 800) return;
+    moreAtRef.current = now;
+    loadMore();
   };
 
   /* ---------- 发送 ---------- */

@@ -204,6 +204,71 @@ function create_notification($args)
     return $notif;
 }
 
+/** 消息内容是否 @ 了某人（@name 后不能紧跟字母/数字/下划线） */
+function jc_text_mentions($content, $name)
+{
+    $name = trim((string) $name);
+    if ($name === '') {
+        return false;
+    }
+    return (bool) preg_match('/@' . preg_quote($name, '/') . '(?![\p{L}\p{N}_])/u', (string) $content);
+}
+
+/**
+ * 群聊 @ 提醒：解析消息里的 @用户名，给被 @ 的成员发 mention 通知。
+ * 同一个人只通知一次（不重复提醒）。
+ */
+function jc_notify_group_mentions($gid, $sender_uid, $content, $message_id)
+{
+    $content = (string) $content;
+    if ($content === '' || strpos($content, '@') === false) {
+        return;
+    }
+    $g = db_one('SELECT `name` FROM `groups` WHERE `id` = ?', array((int) $gid));
+    $gname = $g ? (string) $g['name'] : '群聊';
+    $sender = public_user(get_user($sender_uid));
+    $sname = $sender ? (string) $sender['username'] : '用户';
+
+    foreach (group_member_ids($gid) as $mid) {
+        if ((int) $mid === (int) $sender_uid) {
+            continue;
+        }
+        $u = get_user($mid);
+        if (!$u || !jc_text_mentions($content, $u['username'])) {
+            continue;
+        }
+        create_notification(array(
+            'user_id' => (int) $mid,
+            'type' => 'mention',
+            'actor_id' => (int) $sender_uid,
+            'text' => $sname . ' 在群聊「' . $gname . '」中 @ 了你',
+            'ref_type' => 'group',
+            'ref_id' => (int) $gid,
+        ));
+    }
+}
+
+/** 会话内「还没读过且 @ 了我」的消息条数（首页提示「有人@我」用） */
+function mention_unread_count($conv_type, $conv_id, $uid)
+{
+    $u = get_user($uid);
+    if (!$u || trim((string) $u['username']) === '') {
+        return 0;
+    }
+    $rows = db_all(
+        'SELECT `content` FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `sender_id` != ? AND `recalled` = 0
+         AND `id` NOT IN (SELECT `message_id` FROM `message_reads` WHERE `user_id` = ?) ORDER BY `id` DESC LIMIT 200',
+        array($conv_type, (string) $conv_id, (int) $uid, (int) $uid)
+    );
+    $n = 0;
+    foreach ($rows as $r) {
+        if ($r['content'] !== '' && jc_text_mentions($r['content'], $u['username'])) {
+            $n++;
+        }
+    }
+    return $n;
+}
+
 /** 通知行类型归一化 */
 function normalize_notification_row($n)
 {

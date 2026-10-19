@@ -46,7 +46,7 @@ function jc_default_config()
         // ---- Jay AI（可在管理员后台动态覆盖）----
         'AI_URL' => 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
         'AI_KEY' => 'd63d18de6bcf4a92a13a78696e401e83.0MIXAf8ANp2tG9BD',
-        'AI_MODEL' => 'glm-4-flash',
+        'AI_MODEL' => 'GLM-5.3',
         'AI_NAME' => 'Jay AI',
         'AI_AVATAR' => '',
 
@@ -146,5 +146,6 @@ function jc_schema_version()
     // v2：强制所有表使用 utf8mb4，修复 latin1 默认字符集主机上的 1267 报错
     // v3：新增管理员角色、封禁/禁言字段，以及应用设置表与表情收藏表
     // v4：表情收藏 / 应用设置表结构复核，消息支持引用回复
-    return 4;
+    // v5：撤回消息原文留存表（管理后台「聊天记录」可查看撤回内容）
+    return 5;
 }

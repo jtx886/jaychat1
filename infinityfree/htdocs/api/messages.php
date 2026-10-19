@@ -215,6 +215,7 @@ route('GET', '#^/api/conversations$#', function ($params, $body) {
             'member_count' => count($members),
             'online_count' => $online,
             'unread' => unread_count('group', $cid, $uid),
+            'mention' => mention_unread_count('group', $cid, $uid),
             'last' => $lm ? preview_of($lm) : null,
             'last_time' => $lastTime,
             'sort_time' => $lastTime,
@@ -511,6 +512,10 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
     db_exec_ignore('INSERT INTO `message_reads` (`message_id`, `user_id`, `read_at`) VALUES (?, ?, ?)', array($id, $uid, now_ms()));
 
     $msg = build_message($row);
+    // 群聊 @ 提醒：被 @ 的成员会在通知里收到「有人 @ 了你」
+    if ($convType === 'group' && $msgType === 'text') {
+        jc_notify_group_mentions((int) $convId, $uid, (string) $content, (int) $id);
+    }
     event_to_conversation($convType, $convId, 'message', $msg);
     return array(200, array('message' => $msg));
 });
@@ -547,6 +552,24 @@ route('POST', '#^/api/messages/(\d+)/recall$#', function ($params, $body) {
     if (now_ms() - (int) $m['created_at'] > JC_RECALL_WINDOW) {
         return array(400, array('error' => '超过 3 分钟的消息不能撤回'));
     }
+    // 原文留档（仅管理员后台「聊天记录」可查看，普通客户端仍只看到「该消息已撤回」）
+    db_exec_ignore(
+        'INSERT INTO `message_recalled` (`message_id`, `conv_type`, `conv_id`, `sender_id`, `msg_type`, `content`, `media_url`, `media_thumb`, `extra`, `created_at`, `recalled_at`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        array(
+            $id,
+            (string) $m['conv_type'],
+            (string) $m['conv_id'],
+            (int) $m['sender_id'],
+            (string) $m['msg_type'],
+            (string) $m['content'],
+            (string) $m['media_url'],
+            (string) $m['media_thumb'],
+            (string) $m['extra'],
+            (int) $m['created_at'],
+            now_ms(),
+        )
+    );
     db_run('UPDATE `messages` SET `recalled` = 1, `content` = ?, `media_url` = ?, `media_thumb` = ? WHERE `id` = ?', array('', '', '', $id));
     event_to_conversation($m['conv_type'], $m['conv_id'], 'message:recall', array(
         'id' => $id,

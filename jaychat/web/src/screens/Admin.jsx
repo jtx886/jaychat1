@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../api.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { api, mediaUrl } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, TopBar, ActionSheet, MediaPicker, toast, Spinner, Empty } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
@@ -8,6 +8,7 @@ const TABS = [
   { key: 'overview', name: '总览', icon: 'globe' },
   { key: 'ai', name: 'AI 配置', icon: 'robot' },
   { key: 'users', name: '用户管理', icon: 'users' },
+  { key: 'chatlog', name: '聊天记录', icon: 'message' },
 ];
 
 const BAN_OPTIONS = [
@@ -69,6 +70,7 @@ export default function AdminScreen() {
         {tab === 'overview' ? <Overview /> : null}
         {tab === 'ai' ? <AiConfig /> : null}
         {tab === 'users' ? <UserManager /> : null}
+        {tab === 'chatlog' ? <ChatLog /> : null}
       </div>
     </div>
   );
@@ -455,3 +457,340 @@ function UserManager() {
     </>
   );
 }
+
+/* ============================== 聊天记录 ============================== */
+function msgPreview(m) {
+  if (m.recalled) return '该消息已撤回';
+  if (m.msg_type === 'image') return '[图片]';
+  if (m.msg_type === 'video') return '[视频]';
+  if (m.msg_type === 'sticker') return '[动画表情]';
+  return m.content || '';
+}
+
+function origPreview(o) {
+  if (!o) return '';
+  if (o.msg_type === 'image') return '[图片]';
+  if (o.msg_type === 'video') return '[视频]';
+  if (o.msg_type === 'sticker') return '[动画表情]';
+  return o.content || '';
+}
+
+/** 指定会话的消息记录（含撤回原文） */
+function ChatMessages({ target, onBack }) {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [moreLoading, setMoreLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [recalledTotal, setRecalledTotal] = useState(0);
+  const listRef = useRef(null);
+
+  const fetchPage = async (before) => {
+    const q = `/api/admin/chat/messages?convType=${target.convType}&convId=${encodeURIComponent(target.convId)}&limit=60`;
+    const d = await api.get(before ? `${q}&before=${before}` : q);
+    const items = d.messages || [];
+    if (before) setMessages((l) => items.concat(l));
+    else setMessages(items);
+    setHasMore(!!d.has_more);
+    setRecalledTotal(d.recalled_total || 0);
+    return items;
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      try {
+        await fetchPage(0);
+        setTimeout(() => {
+          const el = listRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        }, 60);
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.convId]);
+
+  const loadEarlier = async () => {
+    if (moreLoading || !messages.length) return;
+    setMoreLoading(true);
+    const el = listRef.current;
+    const prevH = el ? el.scrollHeight : 0;
+    const prevTop = el ? el.scrollTop : 0;
+    try {
+      await fetchPage(messages[0].id);
+      setTimeout(() => {
+        if (el) el.scrollTop = prevTop + (el.scrollHeight - prevH);
+      }, 30);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setMoreLoading(false);
+    }
+  };
+
+  return (
+    <div className="mx mt">
+      <div className="glass glass-strong pad flex gap8" style={{ alignItems: 'center' }}>
+        <button className="icon-btn" onClick={onBack} aria-label="返回">
+          <Icon name="chevron" size={18} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} />
+        </button>
+        <Avatar user={{ id: target.convId, username: target.title, avatar: target.avatar }} size={38} />
+        <div className="list-main">
+          <div className="list-title">
+            <span className="ellipsis">{target.title}</span>
+            {target.is_official ? <span className="badge-soft">官方</span> : null}
+          </div>
+          <div className="list-desc">{target.convType === 'group' ? '群聊记录' : '私聊记录'} · 共 {messages.length} 条已加载{hasMore ? '（还有更早的）' : ''}</div>
+        </div>
+        {recalledTotal > 0 ? <span className="mention-pill">撤回 {recalledTotal}</span> : null}
+      </div>
+
+      <div className="admin-chat-list" ref={listRef}>
+        {loading ? (
+          <div className="center" style={{ padding: '30px 0' }}><Spinner size={22} /></div>
+        ) : messages.length === 0 ? (
+          <Empty icon="message" text="该会话暂无聊天记录" />
+        ) : (
+          <>
+            {hasMore ? (
+              <div className="center" style={{ padding: '4px 0 10px' }}>
+                <button className="btn" onClick={loadEarlier} disabled={moreLoading}>
+                  {moreLoading ? <Spinner size={16} /> : '加载更早的记录'}
+                </button>
+              </div>
+            ) : (
+              <div className="hint center" style={{ padding: '4px 0 10px' }}>已到最顶部</div>
+            )}
+            {messages.map((m) => (
+              <div key={m.id} className="admin-chat-row">
+                <div className="admin-chat-head">
+                  <Avatar user={m.sender || { id: 0, username: 'AI' }} size={28} />
+                  <span className="admin-chat-name">{m.sender?.username || (m.sender_id === 0 ? 'AI' : '用户')}</span>
+                  <span className="hint" style={{ marginLeft: 'auto' }}>{fmtTime(m.created_at)}</span>
+                </div>
+                <div className={'admin-chat-bubble' + (m.recalled ? ' recalled' : '')}>
+                  {m.recalled ? <span className="admin-recall-tag">已撤回</span> : null}
+                  {!m.recalled && (m.msg_type === 'image' || m.msg_type === 'video') && m.media_url ? (
+                    m.msg_type === 'video' ? (
+                      <video src={mediaUrl(m.media_url)} controls playsInline style={{ maxWidth: 200, borderRadius: 10 }} />
+                    ) : (
+                      <img src={mediaUrl(m.media_url)} alt="" loading="lazy" style={{ maxWidth: 200, borderRadius: 10 }} />
+                    )
+                  ) : m.msg_type === 'sticker' && m.media_url && !m.recalled ? (
+                    <img src={mediaUrl(m.media_url)} alt={m.content} loading="lazy" style={{ maxWidth: 120, borderRadius: 10 }} />
+                  ) : (
+                    <span>{msgPreview(m)}</span>
+                  )}
+                  {m.extra?.reply ? (
+                    <div className="admin-chat-quote">引用 {m.extra.reply.name}：{m.extra.reply.text}</div>
+                  ) : null}
+                  {m.orig ? <div className="admin-chat-orig">撤回前原文：{origPreview(m.orig)}</div> : null}
+                </div>
+              </div>
+            ))}
+            <div className="hint center" style={{ padding: '10px 0 4px' }}>已到最新</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatLog() {
+  const [target, setTarget] = useState(null); // { convType, convId, title, avatar, is_official }
+  const [mode, setMode] = useState('dm'); // 'dm' | 'group'
+
+  const [users, setUsers] = useState([]);
+  const [uq, setUq] = useState('');
+  const [userLoading, setUserLoading] = useState(false);
+  const [pickedUser, setPickedUser] = useState(null);
+  const [peers, setPeers] = useState([]);
+  const [peerLoading, setPeerLoading] = useState(false);
+
+  const [groups, setGroups] = useState([]);
+  const [groupLoading, setGroupLoading] = useState(false);
+
+  const loadUsers = async (kw) => {
+    setUserLoading(true);
+    try {
+      const d = await api.get(`/api/admin/users?q=${encodeURIComponent(kw || '')}&limit=200`);
+      setUsers(d.users || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setUserLoading(false);
+    }
+  };
+
+  const loadGroups = async () => {
+    setGroupLoading(true);
+    try {
+      const d = await api.get('/api/admin/chat/groups');
+      setGroups(d.groups || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setGroupLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mode === 'dm' && !users.length) loadUsers('');
+    if (mode === 'group' && !groups.length) loadGroups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  const pickUser = async (u) => {
+    setPickedUser(u);
+    setPeers([]);
+    setPeerLoading(true);
+    try {
+      const d = await api.get(`/api/admin/chat/peers?userId=${u.id}`);
+      setPeers(d.peers || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setPeerLoading(false);
+    }
+  };
+
+  if (target) return <ChatMessages target={target} onBack={() => setTarget(null)} />;
+
+  return (
+    <div className="mx mt">
+      <div className="emoji-tabs">
+        <div className={'emoji-tab' + (mode === 'dm' ? ' active' : '')} onClick={() => { setMode('dm'); setPickedUser(null); setPeers([]); }}>
+          <Icon name="user" size={15} strokeWidth={1.9} /> 私聊
+        </div>
+        <div className={'emoji-tab' + (mode === 'group' ? ' active' : '')} onClick={() => setMode('group')}>
+          <Icon name="users" size={15} strokeWidth={1.9} /> 群聊
+        </div>
+      </div>
+
+      {mode === 'dm' ? (
+        pickedUser ? (
+          <>
+            <div className="glass pad flex gap8" style={{ alignItems: 'center', marginTop: 8 }}>
+              <button className="icon-btn" onClick={() => { setPickedUser(null); setPeers([]); }} aria-label="返回">
+                <Icon name="chevron" size={18} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+              <Avatar user={pickedUser} size={38} />
+              <div className="list-main">
+                <div className="list-title">{pickedUser.username}</div>
+                <div className="list-desc">选择要查看的私聊对象</div>
+              </div>
+            </div>
+            {peerLoading ? (
+              <div className="center" style={{ padding: '26px 0' }}><Spinner size={22} /></div>
+            ) : (
+              <div className="glass mx mt">
+                <div className="list">
+                  {peers.map((p) => (
+                    <div
+                      key={p.conv_id}
+                      className="list-item"
+                      onClick={() => setTarget({ convType: 'dm', convId: p.conv_id, title: `${pickedUser.username} ↔ ${p.peer?.username || ''}`, avatar: p.peer?.avatar })}
+                    >
+                      <Avatar user={p.peer} size={44} />
+                      <div className="list-main">
+                        <div className="list-title">{p.peer?.username || '用户'}</div>
+                        <div className="list-desc">
+                          <span className="dim">{p.last_recalled ? '[已撤回] ' : ''}{p.last_text || '（暂无消息）'}</span>
+                        </div>
+                      </div>
+                      <div className="list-meta">
+                        <span className="hint">{fmtTime(p.last_time)}</span>
+                        <span className="hint">{p.msg_count} 条</span>
+                      </div>
+                    </div>
+                  ))}
+                  {!peers.length ? <Empty icon="message" text="该用户暂无任何私聊记录" /> : null}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="glass mx" style={{ padding: 12, marginTop: 8 }}>
+              <div className="flex gap8">
+                <input
+                  className="input grow"
+                  placeholder="搜索用户名 / 邮箱"
+                  value={uq}
+                  onChange={(e) => setUq(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') loadUsers(uq);
+                  }}
+                />
+                <button className="btn btn-primary" onClick={() => loadUsers(uq)}>
+                  <Icon name="search" size={17} strokeWidth={2} />
+                </button>
+              </div>
+              <div className="hint" style={{ marginTop: 8 }}>选择用户后，即可查看他与所有人的私聊记录（含已撤回内容）</div>
+            </div>
+            {userLoading ? (
+              <div className="center" style={{ padding: '26px 0' }}><Spinner size={22} /></div>
+            ) : (
+              <div className="glass mx mt">
+                <div className="list">
+                  {users.map((u) => (
+                    <div key={u.id} className="list-item" onClick={() => pickUser(u)}>
+                      <Avatar user={u} size={44} />
+                      <div className="list-main">
+                        <div className="list-title">
+                          {u.username}
+                          {u.is_admin ? <span className="badge-soft" style={{ marginLeft: 6 }}>管理员</span> : null}
+                        </div>
+                        <div className="list-desc">{u.email}</div>
+                      </div>
+                      <Icon name="chevron" size={16} strokeWidth={2} style={{ opacity: 0.5 }} />
+                    </div>
+                  ))}
+                  {!users.length ? <Empty icon="users" text="没有找到用户" /> : null}
+                </div>
+              </div>
+            )}
+          </>
+        )
+      ) : (
+        <>
+          <div className="hint" style={{ padding: '8px 4px 0' }}>选择群聊后，可查看该群全部聊天记录（含已撤回内容）</div>
+          {groupLoading ? (
+            <div className="center" style={{ padding: '26px 0' }}><Spinner size={22} /></div>
+          ) : (
+            <div className="glass mx mt">
+              <div className="list">
+                {groups.map((g) => (
+                  <div
+                    key={g.id}
+                    className="list-item"
+                    onClick={() => setTarget({ convType: 'group', convId: String(g.id), title: g.name, avatar: g.avatar, is_official: g.is_official })}
+                  >
+                    <Avatar user={{ id: g.id, username: g.name, avatar: g.avatar, is_official: g.is_official }} size={44} />
+                    <div className="list-main">
+                      <div className="list-title">
+                        {g.name}
+                        {g.is_official ? <span className="badge-soft" style={{ marginLeft: 6 }}>官方</span> : null}
+                      </div>
+                      <div className="list-desc">成员 {g.member_count} · 消息 {g.msg_count} · 最后 {fmtTime(g.last_time)}</div>
+                    </div>
+                    <Icon name="chevron" size={16} strokeWidth={2} style={{ opacity: 0.5 }} />
+                  </div>
+                ))}
+                {!groups.length ? <Empty icon="users" text="暂无群聊" /> : null}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+

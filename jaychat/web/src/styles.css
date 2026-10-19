@@ -817,4 +817,84 @@ body {
   .moment-act:hover { color: var(--text); background: rgba(255, 255, 255, .08); }
   .emoji-cell:hover { background: rgba(255, 255, 255, .09); }
   .sticker-cell:hover { border-color: var(--glass-border-strong); background: rgba(255, 255, 255, .09); }
+  .at-row:hover { background: rgba(255, 255, 255, .08); }
+  .at-me-btn:hover { background: linear-gradient(135deg, rgba(255,107,139,.34), rgba(242,68,95,.26)); }
+}
+
+/* ============================================================================
+ * @ 提及面板 · 有人@我 · 管理员「聊天记录」
+ * ========================================================================== */
+.mention-pill {
+  background: linear-gradient(135deg, #ff6b8b, #f2445f);
+  color: #fff; font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 8px;
+  letter-spacing: .3px; box-shadow: 0 4px 12px rgba(242, 68, 95, .38);
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+}
+
+.at-me-bar { padding: 0 12px 6px; display: flex; justify-content: flex-end; }
+.at-me-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 999px; border: 1px solid rgba(255, 107, 139, .5);
+  background: linear-gradient(135deg, rgba(255,107,139,.24), rgba(242,68,95,.18));
+  color: #ffd6dd; font-size: 13px; font-weight: 750; cursor: pointer;
+  box-shadow: 0 8px 22px rgba(242, 68, 95, .25); animation: atPop .26s var(--ease-spring) both;
+}
+.at-me-btn:active { transform: scale(.96); }
+@keyframes atPop { from { opacity: 0; transform: translateY(6px) scale(.94); } to { opacity: 1; transform: none; } }
+
+.at-panel {
+  margin: 0 10px 8px; border-radius: 20px; overflow: hidden;
+  background: rgba(18, 22, 44, .96); border: 1px solid var(--glass-border-strong);
+  box-shadow: var(--shadow-2); animation: atPanelUp .26s var(--ease-spring) both;
+  display: flex; flex-direction: column; max-height: 46vh;
+}
+@keyframes atPanelUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.at-search {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08); color: var(--text-3);
+}
+.at-search-input {
+  flex: 1; background: transparent; border: none; outline: none; color: var(--text);
+  font-size: 15px; font-family: inherit;
+}
+.at-close {
+  width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255,255,255,.1); color: var(--text-2); display: flex; align-items: center; justify-content: center;
+}
+.at-list { overflow-y: auto; padding: 4px 6px 8px; }
+.at-letter {
+  font-size: 11.5px; font-weight: 800; color: var(--text-3); padding: 8px 10px 4px;
+  position: sticky; top: 0; background: rgba(18,22,44,.96);
+}
+.at-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; cursor: pointer;
+}
+.at-row:active { background: rgba(255,255,255,.08); }
+.at-name { font-size: 14.5px; font-weight: 650; }
+
+.admin-chat-list {
+  margin-top: 10px; max-height: 62vh; overflow-y: auto; padding: 10px 4px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.admin-chat-row { display: flex; flex-direction: column; gap: 4px; }
+.admin-chat-head { display: flex; align-items: center; gap: 8px; padding: 0 4px; }
+.admin-chat-name { font-size: 13px; font-weight: 750; color: var(--text-2); }
+.admin-chat-bubble {
+  margin-left: 36px; padding: 9px 12px; border-radius: 14px; font-size: 14.5px;
+  background: rgba(255,255,255,.06); border: 1px solid var(--glass-border); color: var(--text);
+  max-width: 620px; word-break: break-word; line-height: 1.45;
+}
+.admin-chat-bubble.recalled { color: var(--text-3); font-style: italic; }
+.admin-recall-tag {
+  display: inline-block; margin-right: 6px; font-size: 10.5px; font-weight: 800; font-style: normal;
+  color: #ffb0bd; background: rgba(242,68,95,.18); padding: 1px 6px; border-radius: 6px;
+}
+.admin-chat-orig {
+  margin-top: 6px; padding: 6px 9px; border-radius: 10px; font-style: normal;
+  background: rgba(255, 184, 77, .12); border: 1px solid rgba(255, 184, 77, .3);
+  color: #ffd79a; font-size: 13px;
+}
+.admin-chat-quote {
+  margin-bottom: 5px; padding: 4px 8px; border-left: 3px solid rgba(255,255,255,.28);
+  background: rgba(255,255,255,.05); border-radius: 6px; font-size: 12.5px; color: var(--text-2);
 }

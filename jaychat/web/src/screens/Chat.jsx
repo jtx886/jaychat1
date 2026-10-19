@@ -36,14 +36,18 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [replyMsg, setReplyMsg] = useState(null);
   const [relatedSticker, setRelatedSticker] = useState(null); // {open, loading, keyword, items}
   const [favUrls, setFavUrls] = useState(() => new Set());
-  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mq, setMq] = useState(''); // @ 面板搜索词
   const [aiName, setAiName] = useState('Jay AI');
+  const [aiAvatar, setAiAvatar] = useState('');
   const [onlineSheet, setOnlineSheet] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [oneTime, setOneTime] = useState(false);
   const [oneTimeSec, setOneTimeSec] = useState('5');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
+  const textRef = useRef('');
+  const inputRef = useRef(null);
+  const rowRefs = useRef({});
   const convKey = `${convType}_${convId}`;
   const isGroup = convType === 'group';
   const isOfficialGroup = isGroup && (isOfficial || group?.is_official);
@@ -55,6 +59,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     load();
     return () => {
       openConvRef.current = null;
+      // 离开会话时把最新消息全部标记已读，避免返回首页仍残留红点
+      api
+        .get(`/api/messages?convType=${convType}&convId=${convId}&limit=200`)
+        .then(() => refreshConversations())
+        .catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [convKey]);
@@ -98,31 +107,62 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- 官方群：读取 AI 展示名称（管理员可自定义） ---------- */
+  /* ---------- 群聊：读取 AI 展示名称/头像（管理员可自定义） ---------- */
   useEffect(() => {
-    if (!isOfficialGroup) return;
+    if (!isGroup) return;
     api.get('/api/ai/profile')
       .then((d) => {
-        const n = d?.profile?.name;
-        if (n) setAiName(n);
+        if (d?.profile?.name) setAiName(d.profile.name);
+        setAiAvatar(d?.profile?.avatar || '');
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOfficialGroup]);
+  }, [isGroup]);
 
-  /** 把 @某人 插入输入框 */
-  const insertMentionFor = (user) => {
-    const nm = user?.username;
-    if (!nm) return;
-    setText((t) => `${t}@${nm} `);
+  /* ---------- 输入框文本镜像（供长按 @ 去重判断） ---------- */
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  /** 文本中是否已 @ 过该用户名 */
+  const mentionExists = (t, nm) => {
+    const name = String(nm || '').trim();
+    if (!name) return false;
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+      return new RegExp('@' + esc + '(?![\\p{L}\\p{N}_])', 'u').test(String(t || ''));
+    } catch {
+      return String(t || '').includes('@' + name);
+    }
   };
 
-  /** 长按头像/右键头像：群聊中自动 @ 对方 */
+  /** 把结尾的「@搜索词」替换为 @用户名（无 @ 时直接追加） */
+  const replaceTrailingMention = (t, nm) => {
+    const mm = /(^|\s)@([^\s@]*)$/.exec(String(t || ''));
+    if (!mm) return t ? `${t}@${nm} ` : `@${nm} `;
+    return t.slice(0, mm.index) + mm[1] + `@${nm} `;
+  };
+
+  /** @ 面板：选中某人 */
+  const chooseMention = (nm) => {
+    if (!nm) return;
+    setText((t) => replaceTrailingMention(t, nm));
+    setMq('');
+    requestAnimationFrame(() => inputRef.current?.focus?.());
+  };
+
+  /** 长按头像/右键头像：群聊中自动 @ 对方（已 @ 过则提示，不重复插入） */
   const avatarMentionHandlers = (user, enabled) => {
     if (!enabled) return {};
     const fire = (e) => {
       e?.preventDefault?.();
-      insertMentionFor(user);
+      const nm = user?.username;
+      if (!nm) return;
+      if (mentionExists(textRef.current, nm)) {
+        toast(`你已@${nm}`);
+        return;
+      }
+      setText((t) => replaceTrailingMention(t, nm));
     };
     return {
       onContextMenu: fire,
@@ -132,6 +172,64 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       onTouchEnd: (e) => clearTimeout(e.currentTarget._atTimer),
       onTouchMove: (e) => clearTimeout(e.currentTarget._atTimer),
     };
+  };
+
+  /* ---------- @ 面板：AI 置顶 + 成员按 A→# 排序 + 搜索 ---------- */
+  const mentionMatch = isGroup ? /(^|\s)@([^\s@]*)$/.exec(text) : null;
+  const mentionOpen = !!mentionMatch;
+  const mentionQuery = mentionMatch ? mentionMatch[2] : '';
+  useEffect(() => {
+    setMq(mentionOpen ? mentionQuery : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentionOpen, mentionQuery]);
+
+  const mentionGroups = useMemo(() => {
+    if (!mentionOpen) return [];
+    const q = mq.trim().toLowerCase();
+    const hit = (n) => !q || String(n || '').toLowerCase().includes(q);
+    const out = [];
+    if (hit(aiName)) {
+      out.push({ letter: 'AI', items: [{ id: 0, name: aiName, username: aiName, avatar: aiAvatar, isAi: true }] });
+    }
+    const list = (members || []).filter((m) => Number(m.id) !== Number(me?.id));
+    groupByInitial(list, (x) => x.remark || x.username).forEach((g) => {
+      const items = g.items
+        .filter((m) => hit(m.remark || m.username))
+        .map((m) => ({ id: m.id, name: m.remark || m.username, username: m.username, avatar: m.avatar, isAi: false }));
+      if (items.length) out.push({ letter: g.letter, items });
+    });
+    return out;
+  }, [mentionOpen, mq, members, me?.id, aiName, aiAvatar]);
+
+  /* ---------- 「有人@我」：定位未在底部的 @ 消息 ---------- */
+  const mentionMe = (m) => {
+    if (!isGroup || !m || m.recalled || m.msg_type !== 'text' || m.sender_id === me.id) return false;
+    const nm = String(me?.username || '').trim();
+    if (!nm) return false;
+    const esc = nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+      return new RegExp('@' + esc + '(?![\\p{L}\\p{N}_])', 'u').test(String(m.content || ''));
+    } catch {
+      return String(m.content || '').includes('@' + nm);
+    }
+  };
+  const lastMentionId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (mentionMe(messages[i])) return messages[i].id;
+    }
+    return 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, isGroup, me?.username]);
+  const [mentionAck, setMentionAck] = useState(0);
+  useEffect(() => {
+    setMentionAck(0);
+  }, [convKey]);
+  const lastMsgId = messages.length ? messages[messages.length - 1].id : 0;
+  const showMentionBtn = !!lastMentionId && lastMentionId !== lastMsgId && mentionAck !== lastMentionId;
+  const scrollToMention = () => {
+    const el = rowRefs.current[lastMentionId];
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setMentionAck(lastMentionId);
   };
 
   /** 消息预览文案（用于引用条 / 引用块） */
@@ -176,8 +274,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         if (`${m.conv_type}_${m.conv_id}` !== convKey) return;
         setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
         setTimeout(scrollToBottom, 40);
-        if (m.sender_id !== me.id && !m.extra?.ai) {
-          api.post(`/api/messages/${m.id}/read`, {}).catch(() => {});
+        if (m.sender_id !== me.id) {
+          // 正在会话内查看：立即标记已读并刷新会话列表，避免返回首页仍显示红点
+          api.post(`/api/messages/${m.id}/read`, {}).then(() => refreshConversations()).catch(() => {});
         }
       }),
     );
@@ -240,8 +339,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       setText('');
       setReplyMsg(null);
       setTimeout(scrollToBottom, 40);
-      // 官方群里 @ Jay AI 提问：消息发出后再异步触发机器人回复（不阻塞发送）
-      if (isOfficialGroup && msgType === 'text' && mentionsAi(body, aiName)) {
+      // 群里 @ Jay AI 提问：消息发出后再异步触发机器人回复（不阻塞发送）
+      if (isGroup && msgType === 'text' && mentionsAi(body, aiName)) {
         api.post('/api/ai/ask', { groupId: Number(convId), question: body }).catch(() => {});
       }
     } catch (e) {
@@ -306,17 +405,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const onInputChange = (e) => {
     const v = e.target.value;
     setText(v);
-    if (isOfficialGroup && /(^|\s)@$/.test(v)) setMentionOpen(true);
-    else setMentionOpen(false);
     ws.typing(convType, convId);
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-  };
-
-  const insertMention = () => {
-    setText((t) => t.replace(/(^|\s)@$/, (m, p) => `${p}@${aiName} `));
-    setMentionOpen(false);
   };
 
   /* ---------- 撤回 / 复制 / 删除（本地） ---------- */
@@ -400,7 +492,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       'bubble' + (isAI ? ' bubble-ai' : '') + (plain ? ' plain' : '') + (m.recalled ? ' recalled' : '');
 
     return (
-      <div key={m.id} className={'msg-row' + (mine ? ' mine' : '')}>
+      <div
+        key={m.id}
+        ref={(el) => {
+          if (el) rowRefs.current[m.id] = el;
+        }}
+        className={'msg-row' + (mine ? ' mine' : '')}
+      >
         <span
           className={canAt ? 'avatar-at' : undefined}
           title={canAt ? '长按可 @ 对方' : undefined}
@@ -552,6 +650,14 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         </div>
       ) : null}
 
+      {showMentionBtn ? (
+        <div className="at-me-bar">
+          <button className="at-me-btn" onClick={scrollToMention}>
+            <Icon name="bell" size={14} strokeWidth={1.9} /> 有人@我
+          </button>
+        </div>
+      ) : null}
+
       <div className="chat-input-wrap">
         <button className="icon-btn" onClick={() => setPanel(panel === 'emoji' ? null : 'emoji')} aria-label="表情">
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
@@ -562,9 +668,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
           </svg>
         </button>
         <textarea
+          ref={inputRef}
           className="chat-input"
           rows={1}
-          placeholder={group?.is_official ? `说点什么… 输入 @ 呼叫 ${aiName}` : '说点什么…'}
+          placeholder={isOfficialGroup ? `说点什么… 输入 @ 呼叫 ${aiName}` : '说点什么…'}
           value={text}
           onChange={onInputChange}
           onKeyDown={(e) => {
@@ -585,13 +692,60 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       </div>
 
       {mentionOpen ? (
-        <div style={{ padding: '0 12px 10px' }}>
-          <div className="glass pad" style={{ padding: 8 }}>
-            <div className="menu-item" style={{ border: 'none', padding: '10px 8px' }} onClick={insertMention}>
-              <Icon name="robot" size={20} strokeWidth={1.9} />
-              <span style={{ color: 'var(--ai)', fontWeight: 700 }}>{aiName}</span>
-              <span className="chev" style={{ marginLeft: 'auto' }}>智能机器人</span>
-            </div>
+        <div className="at-panel">
+          <div className="at-search">
+            <Icon name="search" size={15} strokeWidth={1.9} />
+            <input
+              className="at-search-input"
+              placeholder="搜索成员名称"
+              value={mq}
+              autoFocus
+              onChange={(e) => setMq(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const first = mentionGroups[0]?.items?.[0];
+                  if (first) chooseMention(first.isAi ? aiName : first.username);
+                } else if (e.key === 'Escape') {
+                  setText((t) => t.replace(/(^|\s)@[^\s@]*$/, '$1'));
+                }
+              }}
+            />
+            <button
+              className="at-close"
+              onClick={() => setText((t) => t.replace(/(^|\s)@[^\s@]*$/, '$1'))}
+              aria-label="关闭"
+            >
+              <Icon name="close" size={15} strokeWidth={2.1} />
+            </button>
+          </div>
+          <div className="at-list">
+            {mentionGroups.length === 0 ? (
+              <div className="hint center" style={{ padding: '16px 0' }}>没有匹配的成员</div>
+            ) : (
+              mentionGroups.map((g) => (
+                <div key={g.letter}>
+                  <div className="at-letter">{g.letter}</div>
+                  {g.items.map((it) => (
+                    <div
+                      key={g.letter + '_' + (it.isAi ? 'ai' : it.id)}
+                      className="at-row"
+                      onClick={() => chooseMention(it.isAi ? aiName : it.username)}
+                    >
+                      {it.isAi ? (
+                        <IconTile name="robot" tone="mint" box={32} size={17} />
+                      ) : (
+                        <Avatar user={{ id: it.id, username: it.name, avatar: it.avatar }} size={32} />
+                      )}
+                      <span className="at-name" style={it.isAi ? { color: 'var(--ai)', fontWeight: 700 } : undefined}>
+                        {it.name}
+                      </span>
+                      {it.isAi ? <span className="hint" style={{ marginLeft: 'auto' }}>智能机器人</span> : null}
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
           </div>
         </div>
       ) : null}

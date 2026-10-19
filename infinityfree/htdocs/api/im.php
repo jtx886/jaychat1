@@ -29,14 +29,14 @@ function jc_insert_ai_message($gid, $content, $extra)
     return build_message($row);
 }
 
-// Jay AI 提问：官方群专属
+// Jay AI 提问：任意群聊中 @Jay AI 均可触发（需为群成员）
 route('POST', '#^/api/ai/ask$#', function ($params, $body) {
     $uid = require_auth();
     $gid = isset($body['groupId']) ? (int) $body['groupId'] : 0;
     $question = isset($body['question']) ? mb_substr((string) $body['question'], 0, 500, 'UTF-8') : '';
     $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
-    if (!$g || empty($g['is_official'])) {
-        return array(403, array('error' => '仅 Jay Chat 官方群支持 Jay AI'));
+    if (!$g) {
+        return array(404, array('error' => '群聊不存在'));
     }
     if (!member_role($gid, $uid)) {
         return array(403, array('error' => '你不在该群中'));

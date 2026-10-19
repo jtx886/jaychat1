@@ -119,6 +119,7 @@ export default function HomeScreen() {
                 <div className="list-title">
                   <span className="ellipsis">{c.name}</span>
                   {c.is_official ? <span className="badge-soft">官方</span> : null}
+                  {c.mention > 0 ? <span className="mention-pill">有人@我</span> : null}
                   <span className="conv-flags">
                     {c.pinned ? <span className="flag-pin" title="已置顶"><Icon name="pin" size={14} strokeWidth={1.9} /></span> : null}
                     {c.dnd ? <span className="flag-dnd" title="免打扰"><Icon name="bellOff" size={14} strokeWidth={1.9} /></span> : null}

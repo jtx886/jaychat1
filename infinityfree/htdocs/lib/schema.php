@@ -120,6 +120,22 @@ function jc_schema_tables()
             ),
             'pk' => array('message_id', 'user_id'),
         ),
+        // 撤回消息原文留存（仅管理员后台「聊天记录」可查看；对普通客户端不下发）
+        'message_recalled' => array(
+            'cols' => array(
+                array('message_id', 'pk'),
+                array('conv_type', 'str:16', 'notnull'),
+                array('conv_id', 'str:100', 'notnull'),
+                array('sender_id', 'int', 'notnull'),
+                array('msg_type', 'str:16', 'default:text'),
+                array('content', 'str:2000', 'default:'),
+                array('media_url', 'str:1000', 'default:'),
+                array('media_thumb', 'str:1000', 'default:'),
+                array('extra', 'str:2000', 'default:'),
+                array('created_at', 'bigint', 'notnull'),
+                array('recalled_at', 'bigint', 'notnull'),
+            ),
+        ),
         'message_burns' => array(
             'cols' => array(
                 array('message_id', 'int', 'notnull'),
@@ -358,6 +374,7 @@ function jc_schema_indexes($driver)
         'CREATE INDEX ' . $ine . 'idx_msg_conv ON `messages` (`conv_type`, `conv_id`, `id`)',
         'CREATE INDEX ' . $ine . 'idx_notif_user ON `notifications` (`user_id`, `read`)',
         'CREATE INDEX ' . $ine . 'idx_events_user ON `events` (`user_id`, `id`)',
+        'CREATE INDEX ' . $ine . 'idx_recalled_conv ON `message_recalled` (`conv_type`, `conv_id`, `message_id`)',
         'CREATE INDEX ' . $ine . 'idx_verify_email ON `verify_codes` (`email`)',
     );
 }
