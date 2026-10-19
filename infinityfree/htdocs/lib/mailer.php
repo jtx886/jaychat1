@@ -89,18 +89,40 @@ function jc_smtp_send($to, $subject, $html, $text = '')
     stream_set_timeout($fp, 12);
 
     $fail = null;
+    $ehloResp = '';
     $r = jc_smtp_read($fp);
     if (substr(trim($r), 0, 3) !== '220') {
         $fail = '服务无响应：' . trim($r);
     }
     if ($fail === null) {
-        list($ok) = jc_smtp_cmd($fp, 'EHLO jaychat', 250);
+        list($ok, $ehloResp) = jc_smtp_cmd($fp, 'EHLO jaychat', 250);
         if (!$ok) {
             // 部分服务器只认 HELO
-            list($ok) = jc_smtp_cmd($fp, 'HELO jaychat', 250);
+            list($ok, $ehloResp) = jc_smtp_cmd($fp, 'HELO jaychat', 250);
         }
         if (!$ok) {
             $fail = 'EHLO 失败';
+        }
+    }
+    // 明文端口（如 InfinityFree 放行的 587）若服务器支持 STARTTLS，升级加密后再认证
+    if ($fail === null && $port !== 465 && stripos($ehloResp, 'STARTTLS') !== false) {
+        list($ok, $resp) = jc_smtp_cmd($fp, 'STARTTLS', 220);
+        if (!$ok) {
+            $fail = 'STARTTLS 失败：' . trim($resp);
+        } else {
+            $crypto = STREAM_CRYPTO_METHOD_TLS_CLIENT;
+            if (defined('STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT')) {
+                $crypto |= STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT;
+            }
+            if (@stream_socket_enable_crypto($fp, true, $crypto) !== true) {
+                $fail = 'TLS 握手失败';
+            } else {
+                // 加密通道建立后需要重新 EHLO
+                list($ok) = jc_smtp_cmd($fp, 'EHLO jaychat', 250);
+                if (!$ok) {
+                    $fail = 'STARTTLS 后 EHLO 失败';
+                }
+            }
         }
     }
     if ($fail === null) {
