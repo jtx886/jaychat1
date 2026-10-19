@@ -69,13 +69,19 @@ route('POST', '#^/api/auth/send-code$#', function ($params, $body) {
         array($email, $code, $purpose, now_ms() + 5 * 60000, now_ms())
     );
 
-    // 无 SMTP：验证码是否回传由 ALLOW_DEV_CODE 控制（等价 Node DEV_MODE 行为）
+    // 通过 163 SMTP 发送验证码邮件；失败时按 ALLOW_DEV_CODE 回传验证码兜底
+    $subject = ($purpose === 'reset' ? '重置密码' : '注册') . '验证码 - Jay Chat';
+    $mail = jc_smtp_send($email, $subject, jc_code_mail_html($code, $purpose));
+    if (!empty($mail['sent'])) {
+        return array(200, array('ok' => true, 'sent' => true, 'hint' => '验证码已发送至 ' . $email . '，请查收（含垃圾箱）'));
+    }
     $dev = jc_config('ALLOW_DEV_CODE') ? $code : null;
     return array(200, array(
         'ok' => true,
         'sent' => false,
         'devCode' => $dev,
-        'hint' => '本站未接入邮件服务，无法发送验证码',
+        'hint' => '邮件发送失败：' . (isset($mail['error']) && $mail['error'] !== '' ? $mail['error'] : '未知原因')
+            . ($dev !== null ? '，验证码为 ' . $dev : ''),
     ));
 });
 
@@ -134,6 +140,12 @@ route('POST', '#^/api/auth/login$#', function ($params, $body) {
     }
     if (!verify_password($password, $u['pwd'])) {
         return array(400, array('error' => '密码错误'));
+    }
+    $ban = jc_ban_state($u);
+    if ($ban['banned']) {
+        return array(403, array('error' => $ban['until'] > 0
+            ? ('该账号已被封禁，剩余 ' . (int) ceil(($ban['until'] - now_ms()) / 1000) . ' 秒')
+            : '该账号已被永久封禁'));
     }
     return array(200, array('token' => sign_token((int) $u['id']), 'user' => self_user($u)));
 });

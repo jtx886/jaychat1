@@ -33,6 +33,7 @@ function public_user($u)
         'username' => (string) $u['username'],
         'avatar' => isset($u['avatar']) ? (string) $u['avatar'] : '',
         'is_official' => !empty($u['is_official']),
+        'role' => isset($u['role']) ? (string) $u['role'] : 'user',
         'online' => user_is_online($u),
         'last_seen' => (int) (isset($u['last_seen']) ? $u['last_seen'] : 0),
     );
@@ -50,6 +51,9 @@ function self_user($u)
     $base['name_count'] = (int) (isset($u['name_count']) ? $u['name_count'] : 0);
     $base['name_week'] = isset($u['name_week']) ? (string) $u['name_week'] : '';
     $base['created_at'] = (int) $u['created_at'];
+    $base['is_admin'] = jc_is_admin($u);
+    $base['banned'] = jc_ban_state($u)['banned'];
+    $base['muted_until'] = (int) (isset($u['muted_until']) ? $u['muted_until'] : 0);
     return $base;
 }
 
@@ -222,7 +226,21 @@ function normalize_notification_row($n)
 /** 组装消息（等价 buildMessage） */
 function build_message($row, $extra = array())
 {
-    $sender = public_user(get_user($row['sender_id']));
+    if ((int) $row['sender_id'] === 0) {
+        // Jay AI：使用管理员后台配置的展示名称与头像
+        $ai = jc_ai_public();
+        $sender = array(
+            'id' => 0,
+            'username' => $ai['name'],
+            'avatar' => $ai['avatar'],
+            'is_official' => true,
+            'role' => 'ai',
+            'online' => true,
+            'last_seen' => 0,
+        );
+    } else {
+        $sender = public_user(get_user($row['sender_id']));
+    }
     $read_count = (int) db_value('SELECT COUNT(*) FROM `message_reads` WHERE `message_id` = ?', array((int) $row['id']));
     $burns_rows = db_all('SELECT `user_id` FROM `message_burns` WHERE `message_id` = ?', array((int) $row['id']));
     $burns = array();
@@ -263,12 +281,12 @@ function seed_official()
     $official = db_one('SELECT * FROM `users` WHERE `email` = ?', array($acc['email']));
     if (!$official) {
         $id = db_insert(
-            'INSERT INTO `users` (`username`, `email`, `pwd`, `avatar`, `is_official`, `created_at`) VALUES (?, ?, ?, ?, 1, ?)',
-            array($acc['username'], $acc['email'], hash_password($acc['password']), '/assets/official-avatar.svg', now_ms())
+            'INSERT INTO `users` (`username`, `email`, `pwd`, `avatar`, `is_official`, `role`, `created_at`) VALUES (?, ?, ?, ?, 1, ?, ?)',
+            array($acc['username'], $acc['email'], hash_password($acc['password']), '/assets/official-avatar.svg', 'admin', now_ms())
         );
         $official = db_one('SELECT * FROM `users` WHERE `id` = ?', array($id));
     } else {
-        db_run('UPDATE `users` SET `is_official` = 1, `username` = ? WHERE `id` = ?', array($acc['username'], (int) $official['id']));
+        db_run('UPDATE `users` SET `is_official` = 1, `username` = ?, `role` = ? WHERE `id` = ?', array($acc['username'], 'admin', (int) $official['id']));
         $official = db_one('SELECT * FROM `users` WHERE `id` = ?', array((int) $official['id']));
     }
 

@@ -142,6 +142,8 @@ if ($isApi) {
     require_once __DIR__ . '/api/moments.php';
     require_once __DIR__ . '/api/notifications.php';
     require_once __DIR__ . '/api/im.php';
+    require_once __DIR__ . '/api/admin.php';
+    require_once __DIR__ . '/api/stickers.php';
     require_once __DIR__ . '/api/realtime.php';
 
     $body = jc_read_body();

@@ -17,6 +17,9 @@ require_once __DIR__ . '/http.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/events.php';
+require_once __DIR__ . '/settings.php';
+require_once __DIR__ . '/net.php';
+require_once __DIR__ . '/mailer.php';
 
 db_install();
 seed_official();

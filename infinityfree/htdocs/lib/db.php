@@ -188,9 +188,17 @@ function db_install()
             if ($driver === 'sqlite') {
                 db_ensure_column('messages', 'burn_sec', '`burn_sec` INTEGER DEFAULT 5');
                 db_ensure_column('users', 'last_poll', '`last_poll` BIGINT DEFAULT 0');
+                db_ensure_column('users', 'role', "`role` TEXT DEFAULT 'user'");
+                db_ensure_column('users', 'banned', '`banned` INTEGER DEFAULT 0');
+                db_ensure_column('users', 'banned_until', '`banned_until` BIGINT DEFAULT 0');
+                db_ensure_column('users', 'muted_until', '`muted_until` BIGINT DEFAULT 0');
             } else {
                 db_ensure_column('messages', 'burn_sec', '`burn_sec` INT DEFAULT 5');
                 db_ensure_column('users', 'last_poll', '`last_poll` BIGINT DEFAULT 0');
+                db_ensure_column('users', 'role', "`role` VARCHAR(16) DEFAULT 'user'");
+                db_ensure_column('users', 'banned', '`banned` INT DEFAULT 0');
+                db_ensure_column('users', 'banned_until', '`banned_until` BIGINT DEFAULT 0');
+                db_ensure_column('users', 'muted_until', '`muted_until` BIGINT DEFAULT 0');
             }
         } catch (Exception $e) {
         }

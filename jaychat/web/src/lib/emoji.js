@@ -57,51 +57,18 @@ export const EMOJI_CATEGORIES = [
   },
 ];
 
-/* ============ 动画表情包：Telegram 同款（内联 SVG 逐帧动画，见 components/Sticker.jsx） ============ */
-const PACK_DEFS = [
-  {
-    key: 'tg',
-    name: 'Telegram 经典',
-    icon: 'sparkle',
-    arts: [
-      ['beat', '心动'], ['thumb', '点赞'], ['laugh', '大笑'], ['cry', '大哭'],
-      ['kiss', '亲亲'], ['eyes', '星星眼'], ['star', '闪耀'],
-    ],
-  },
-  {
-    key: 'party',
-    name: '派对庆祝',
-    icon: 'flame',
-    arts: [
-      ['party', '撒花'], ['glitter', '闪粉'], ['rocket', '发射'], ['rainbow', '彩虹'],
-      ['note', '音乐'], ['100', '满分'], ['fire', '火热'],
-    ],
-  },
-  {
-    key: 'pet',
-    name: '萌宠搞怪',
-    icon: 'crown',
-    arts: [
-      ['cat', '猫咪'], ['dog', '狗狗'], ['unicorn', '独角兽'], ['butterfly', '蝴蝶'],
-      ['ghost', '幽灵'], ['skull', '骷髅'], ['mind', '爆头'],
-    ],
-  },
+/* ============ 动画表情包：接入 soogif 在线资源（面板见 components/EmojiPanel.jsx） ============ */
+
+/** 热门搜索关键词（未输入时展示，点击即搜索） */
+export const STICKER_HOT_KEYWORDS = [
+  '哈哈', '比心', '加油', '晚安', '疑问', '点赞', '狗头', '谢谢', '无语', '开心', '委屈', '爱心',
 ];
 
-export const STICKER_PACKS = PACK_DEFS.map((p) => ({
-  key: p.key,
-  name: p.name,
-  icon: p.icon,
-  items: p.arts.map(([art, label]) => ({ id: art, art, label })),
-}));
-
-/** 全量动画贴纸（供聊天消息渲染 / 汇总展示） */
-export const STICKERS = STICKER_PACKS.flatMap((p) => p.items);
-
-/** 贴纸消息编码：stu|<art> */
-export const encodeSticker = (s) => `stu|${s.art || s.id}`;
-
-/** 解析贴纸消息；兼容旧版 stu|<anim>|<emoji> 编码 */
+/**
+ * 解析历史贴纸消息内容。
+ * 兼容旧版编码：stu|<art>（内联动画）与 stu|<anim>|<emoji>。
+ * 新版 soogif 表情以 msg_type=sticker + media_url 直接发送，不走此解析。
+ */
 export function parseSticker(text) {
   if (typeof text !== 'string' || !text.startsWith('stu|')) return null;
   const parts = text.split('|');

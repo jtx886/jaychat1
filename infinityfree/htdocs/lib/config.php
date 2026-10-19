@@ -33,6 +33,25 @@ function jc_default_config()
 
         // 上传大小上限（字节）。InfinityFree 单文件上限 10MB
         'UPLOAD_MAX_BYTES' => 10 * 1024 * 1024,
+
+        // ---- 邮件（163 SMTP，SSL 465）----
+        // 用于注册/找回密码验证码。可在 config.local.php 覆盖。
+        'SMTP_HOST' => 'smtp.163.com',
+        'SMTP_PORT' => 465,
+        'SMTP_USER' => 'jtxnb886@163.com',
+        'SMTP_PASS' => 'FLLRDtadYAfGXp9Y',
+        'SMTP_FROM' => 'jtxnb886@163.com',
+        'SMTP_FROM_NAME' => 'Jay Chat',
+
+        // ---- Jay AI（可在管理员后台动态覆盖）----
+        'AI_URL' => 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+        'AI_KEY' => 'd63d18de6bcf4a92a13a78696e401e83.0MIXAf8ANp2tG9BD',
+        'AI_MODEL' => 'glm-4-flash',
+        'AI_NAME' => 'Jay AI',
+        'AI_AVATAR' => '',
+
+        // 额外管理员邮箱（逗号分隔）；官方账号始终为管理员
+        'ADMIN_EMAILS' => '',
     );
 }
 
@@ -46,10 +65,12 @@ function jc_config($key = null)
 
         // 1) 环境变量覆盖
         $boolKeys = array('DEV_MODE', 'ALLOW_DEV_CODE');
-        $intKeys = array('UPLOAD_MAX_BYTES');
+        $intKeys = array('UPLOAD_MAX_BYTES', 'SMTP_PORT');
         $envKeys = array(
             'DB_DRIVER', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS',
             'DB_PATH', 'JWT_SECRET', 'DEV_MODE', 'ALLOW_DEV_CODE', 'UPLOAD_MAX_BYTES',
+            'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'SMTP_FROM_NAME',
+            'AI_URL', 'AI_KEY', 'AI_MODEL', 'AI_NAME', 'AI_AVATAR', 'ADMIN_EMAILS',
         );
         foreach ($envKeys as $k) {
             $v = getenv($k);
@@ -105,9 +126,25 @@ function jc_official_account()
     );
 }
 
+/** 额外管理员邮箱列表（不含官方账号，官方账号始终是管理员） */
+function jc_admin_emails()
+{
+    $raw = (string) jc_config('ADMIN_EMAILS');
+    $out = array();
+    foreach (preg_split('/[\s,;]+/', $raw) as $e) {
+        $e = trim(strtolower($e));
+        if ($e !== '') {
+            $out[] = $e;
+        }
+    }
+    return $out;
+}
+
 /** 数据库 schema 版本（用于自检/安装判定） */
 function jc_schema_version()
 {
     // v2：强制所有表使用 utf8mb4，修复 latin1 默认字符集主机上的 1267 报错
-    return 2;
+    // v3：新增管理员角色、封禁/禁言字段，以及应用设置表与表情收藏表
+    // v4：表情收藏 / 应用设置表结构复核，消息支持引用回复
+    return 4;
 }

@@ -49,7 +49,7 @@ function preview_of($m)
         $text = '[一次性消息]';
     }
     if ((int) $m['sender_id'] === 0) {
-        $sender = 'Jay AI';
+        $sender = jc_ai_public()['name'];
     } else {
         $pu = public_user(get_user($m['sender_id']));
         $sender = $pu ? $pu['username'] : '';
@@ -404,6 +404,13 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
     $oneTime = !empty($body['one_time']);
     $burnSec = isset($body['burn_sec']) ? $body['burn_sec'] : 0;
     $clientId = isset($body['clientId']) ? $body['clientId'] : null;
+    $replyTo = isset($body['reply_to']) ? (int) $body['reply_to'] : 0;
+
+    // 封禁 / 全站禁言拦截
+    $blockReason = jc_send_block_reason(get_user($uid));
+    if ($blockReason !== null) {
+        return array(403, array('error' => $blockReason));
+    }
 
     if ($convType === 'dm') {
         $peer = 0;
@@ -432,11 +439,44 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
     if ($msgType === 'text' && trim((string) $content) === '') {
         return array(400, array('error' => '消息不能为空'));
     }
-    if ($msgType === 'sticker' && trim((string) $content) === '') {
+    if ($msgType === 'sticker' && trim((string) $content) === '' && !$mediaUrl) {
         return array(400, array('error' => '表情不能为空'));
     }
     if ($msgType !== 'text' && $msgType !== 'sticker' && !$mediaUrl) {
         return array(400, array('error' => '缺少媒体文件'));
+    }
+
+    // 引用回复：拼装被引用消息摘要，写入 extra.reply
+    $extra = array();
+    if ($clientId !== null && $clientId !== '') {
+        $extra['client_id'] = $clientId;
+    }
+    if ($replyTo > 0) {
+        $rm = db_one('SELECT * FROM `messages` WHERE `id` = ?', array($replyTo));
+        if ($rm && (string) $rm['conv_type'] === (string) $convType && (string) $rm['conv_id'] === (string) $convId) {
+            if ((int) $rm['sender_id'] === 0) {
+                $rname = jc_ai_public()['name'];
+            } else {
+                $rpu = public_user(get_user($rm['sender_id']));
+                $rname = $rpu ? $rpu['username'] : '用户';
+            }
+            if (!empty($rm['recalled'])) {
+                $rtext = '该消息已撤回';
+            } elseif ($rm['msg_type'] === 'image') {
+                $rtext = '[图片]';
+            } elseif ($rm['msg_type'] === 'video') {
+                $rtext = '[视频]';
+            } elseif ($rm['msg_type'] === 'sticker') {
+                $rtext = '[动画表情]';
+            } else {
+                $rtext = (string) $rm['content'];
+            }
+            $extra['reply'] = array(
+                'id' => $replyTo,
+                'name' => $rname,
+                'text' => mb_substr($rtext, 0, 80, 'UTF-8'),
+            );
+        }
     }
 
     $burn = 5;
@@ -463,15 +503,14 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
             (string) $mediaThumb,
             $oneTime ? 1 : 0,
             $burn,
-            '',
+            empty($extra) ? '' : jc_json($extra),
             now_ms(),
         )
     );
     $row = db_one('SELECT * FROM `messages` WHERE `id` = ?', array($id));
     db_exec_ignore('INSERT INTO `message_reads` (`message_id`, `user_id`, `read_at`) VALUES (?, ?, ?)', array($id, $uid, now_ms()));
 
-    $extraIn = ($clientId !== null && $clientId !== '') ? array('client_id' => $clientId) : array();
-    $msg = build_message($row, $extraIn);
+    $msg = build_message($row);
     event_to_conversation($convType, $convId, 'message', $msg);
     return array(200, array('message' => $msg));
 });

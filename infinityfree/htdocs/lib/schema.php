@@ -32,6 +32,13 @@ function jc_schema_tables()
                 array('last_poll', 'bigint', 'default:0'),
                 array('name_week', 'str:16', 'default:'),
                 array('name_count', 'int', 'default:0'),
+                // 角色：user | admin（管理员可在「我的 → 管理员后台」管理全站）
+                array('role', 'str:16', 'default:user'),
+                // 封禁：banned=1 时禁止登录；banned_until=0 表示永久封禁
+                array('banned', 'int', 'default:0'),
+                array('banned_until', 'bigint', 'default:0'),
+                // 全站禁言：muted_until>now 时禁止在任何会话发消息
+                array('muted_until', 'bigint', 'default:0'),
                 array('created_at', 'bigint', 'notnull'),
             ),
         ),
@@ -200,6 +207,26 @@ function jc_schema_tables()
                 array('data', 'text', 'notnull'),
                 array('created_at', 'bigint', 'notnull'),
             ),
+        ),
+        // 应用设置（管理员后台写入：AI 配置等）
+        'app_settings' => array(
+            'cols' => array(
+                array('name', 'str:64', 'notnull'),
+                array('value', 'str:1000', 'default:'),
+            ),
+            'pk' => array('name'),
+        ),
+        // 我的添加（用户收藏的动画表情包）
+        'sticker_favs' => array(
+            'cols' => array(
+                array('user_id', 'int', 'notnull'),
+                // 表情地址的 md5（作为联合主键的一部分，避免超长索引）
+                array('ukey', 'str:64', 'notnull'),
+                array('url', 'str:1000', 'default:'),
+                array('label', 'str:128', 'default:'),
+                array('added_at', 'bigint', 'notnull'),
+            ),
+            'pk' => array('user_id', 'ukey'),
         ),
         // 安装标记表
         'jc_meta' => array(
