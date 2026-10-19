@@ -3,6 +3,7 @@
   "appName": "Jay Chat",
   "webDir": "dist",
   "server": {
+    "url": "http://jaychat.ct.ws",
     "androidScheme": "http",
     "cleartext": true
   },
