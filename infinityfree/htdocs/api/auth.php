@@ -75,7 +75,7 @@ route('POST', '#^/api/auth/send-code$#', function ($params, $body) {
         'ok' => true,
         'sent' => false,
         'devCode' => $dev,
-        'hint' => '邮件发送失败，请稍后重试',
+        'hint' => '本站未接入邮件服务，无法发送验证码',
     ));
 });
 

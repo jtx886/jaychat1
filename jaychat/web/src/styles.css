@@ -107,6 +107,16 @@ body {
 .page-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 18px; }
 .page-scroll.with-nav { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 26px); }
 
+/* 免费主机无邮件服务时，把验证码直接展示出来（需要用户手动填写） */
+.dev-code {
+  margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .16);
+}
+.dev-code-label { font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+.dev-code-value { font-size: 20px; font-weight: 800; letter-spacing: 3px; color: var(--brand-2); user-select: all; }
+
 /* ---------------------------- 顶栏 ---------------------------- */
 .topbar {
   display: flex; align-items: center; gap: 10px;
