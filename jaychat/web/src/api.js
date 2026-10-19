@@ -84,7 +84,15 @@ export async function http(path, { method = 'GET', body, token, raw, timeout } =
   }
   if (raw) return res;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error || `请求失败(${res.status})`, res.status);
+  if (!res.ok) {
+    // 后端未安装（PHP 版首次部署）→ 自动跳转到一键安装向导
+    if (data && data.install && typeof window !== 'undefined') {
+      try {
+        window.location.replace('./install.php');
+      } catch {}
+    }
+    throw new ApiError(data.error || `请求失败(${res.status})`, res.status);
+  }
   return data;
 }
 

@@ -1,4 +1,4 @@
-# Jay Chat · InfinityFree 免费主机部署包
+# Jay Chat · InfinityFree 免费主机部署版（PHP + MySQL）
 
 把 Jay Chat 从 Node.js 后端移植为 **纯 PHP + MySQL** 版本，可部署在 InfinityFree 等只支持
 PHP 的免费虚拟主机上。前端与 Node 版**完全共用同一份构建产物**，接口契约逐字段一致。
@@ -8,79 +8,41 @@ PHP 的免费虚拟主机上。前端与 Node 版**完全共用同一份构建�
 
 ---
 
-## 一、目录结构
+## 一、一键部署（3 步）
+
+1. **上传文件**：把 **`htdocs/` 里的全部内容**上传到站点的 `htdocs/` 目录（保持目录结构）。
+2. **建数据库**：InfinityFree 控制面板 → **MySQL Databases** → 创建数据库，
+   记下 Host / Database / Username / Password 四项。
+3. **打开安装**：浏览器访问 `https://你的域名/install.php`，填入上面四项，点「开始安装」。
+
+安装向导会自动：连接测试 → 建表 → 初始化官方账号与官方群 → 写入 `lib/config.local.php`。
+完成后点「进入 Jay Chat」即可使用（官方账号 `杰同学` / 密码 `101113`）。
+
+> 未安装时，前端调用接口会收到明确提示并自动跳转到 `install.php`，不会再出现空白 500。
+
+---
+
+## 二、目录结构
 
 ```
 infinityfree/
-├── config.sample.php          # 配置示例（复制为 htdocs/lib/config.local.php）
+├── README.md
+├── config.sample.php          # 手动配置示例（也可完全用 install.php 向导，无需此文件）
 ├── database/
-│   └── schema.sql             # MySQL 建表脚本（可选：首次请求也会自动建表）
-└── htdocs/                    # ← 把这些内容整体上传到主机的 htdocs 目录
+│   └── schema.sql             # MySQL 建表脚本（向导会自动建表，此文件仅备用）
+└── htdocs/                    # ← 这部分整体上传到主机的 htdocs 目录
+    ├── install.php            # 一键安装向导
     ├── index.php              # 入口（前端 + /api 分发）
     ├── .htaccess              # 重写规则（/api 分发、静态直出、SPA 兜底）
-    ├── index.html             # 前端页面（Vite 构建产物）
+    ├── index.html             # 前端页面
     ├── assets/                # 前端 JS/CSS（构建产物）
     ├── logo.svg / logo-192.png
-    ├── api/                   # 各业务模块（auth/users/friends/groups/messages/…）
+    ├── api/                   # 业务模块（auth/users/friends/groups/messages/…）
     ├── lib/                   # 框架：配置、PDO、鉴权、SQL 构建、事件总线
     └── uploads/               # 用户上传目录（已放 .htaccess 禁止执行脚本）
 ```
 
----
-
-## 二、部署步骤
-
-### 1. 注册并创建站点
-1. 注册 [InfinityFree](https://infinityfree.net/) 账号，创建一个免费站点（获得 `xxx.infinityfreeapp.com` 域名）。
-2. 进入控制面板，若域名不是自己的，按提示修改 NS 或等待系统分配子域名。
-
-### 2. 创建 MySQL 数据库
-1. 控制面板 → **MySQL Databases** → 创建一个数据库。
-2. 记下系统给出的四项信息（在数据库详情页可见）：
-   - Host（形如 `sqlXXX.infinityfree.com`）
-   - Database 名（形如 `if0_XXXXXXXX_jaychat`）
-   - Username（形如 `if0_XXXXXXXX`）
-   - Password（你自己设置的密码）
-
-### 3. 上传网站文件
-1. 控制面板 → **Online File Manager**（或 FTP）。
-2. 进入站点的 `htdocs/` 目录，**删除**它里面默认自带的文件。
-3. 把本包 `htdocs/` 目录下的**所有内容**上传到站点的 `htdocs/` 里。
-   - 保持目录层级：`htdocs/index.php`、`htdocs/api/...`、`htdocs/lib/...` 等。
-   - `assets/` 里的文件名带哈希，整个目录一起传，不要改名。
-
-### 4. 填写配置
-1. 复制 `config.sample.php`，上传并重命名为 `htdocs/lib/config.local.php`。
-2. 按上一步记录，修改数据库连接、签名密钥等：
-
-```php
-<?php
-return array(
-    'DB_DRIVER' => 'mysql',
-    'DB_HOST'   => 'sqlXXX.infinityfree.com',   // ← 你的 Host
-    'DB_PORT'   => '3306',
-    'DB_NAME'   => 'if0_XXXXXXXX_jaychat',      // ← 你的 Database 名
-    'DB_USER'   => 'if0_XXXXXXXX',              // ← 你的 Username
-    'DB_PASS'   => '你的数据库密码',             // ← 你的密码
-
-    // 生产环境务必改成随机长字符串
-    'JWT_SECRET' => '换成一段很长的随机字符串',
-
-    // 无 SMTP：true 时 send-code 会把验证码直接回传（仅个人演示；正式环境请设 false）
-    'ALLOW_DEV_CODE' => true,
-);
-```
-
-> 也可以完全不建 `config.local.php`，改用环境变量覆盖（但 InfinityFree 免费主机
-> 一般无法设置环境变量，所以推荐上面的方式）。
-
-### 5. 建表
-两种方式任选其一（**首次访问任何 API 时也会自动建表**，通常无需手动操作）：
-- **自动**：直接访问站点 `https://你的域名/api/health`，返回 `{"ok":true,...}` 即表示数据库已就绪。
-- **手动**：控制面板 → **phpMyAdmin** → 选择该数据库 → 导入 `database/schema.sql`。
-
-### 6. 访问站点
-打开 `https://你的域名/` 即可看到前端页面。
+> GitHub Releases 里下载的 zip **只包含 `htdocs/` 的内容**（解压即上传，无多余文件）。
 
 ---
 
@@ -109,13 +71,13 @@ DB_DRIVER=sqlite DB_PATH=/tmp/jc/jaychat.db JWT_SECRET=dev \
 | 在线状态 | WebSocket 心跳 | `last_poll` 60 秒窗口判定 |
 
 - 前端**无需任何配置**：WebSocket 连接失败 2 次后自动探测 `/api/poll`，探测成功即永久切换为轮询模式。
-- 事件结构与 Node 版 WebSocket 推送**逐字段一致**（`message` / `presence` / `typing` / `moment:*` / `notification` …），前端订阅逻辑不变。
+- 事件结构与 Node 版 WebSocket 推送**逐字段一致**（`message` / `presence` / `typing` / `moment:*` / `notification` …）。
 
 ---
 
 ## 五、与完整版的差异（受免费主机限制）
 
 - **邮件验证码**：免费主机无 SMTP，`send-code` 不真正发信；开启 `ALLOW_DEV_CODE` 时把验证码随响应回传（字段 `devCode`）。
-- **腾讯云 IM / AI**：未集成对应云服务的部署会返回明确错误（"当前部署未启用腾讯云 IM / Jay AI"），不影响基础聊天功能。
-- **上传上限**：单文件 10MB（InfinityFree 限制），已同步到 `UPLOAD_MAX_BYTES`。大视频请改用图床/对象存储外链。
-- **无 cron / 无常驻进程**：所有清理、状态更新均按请求触发，不依赖定时任务。
+- **腾讯云 IM / AI**：未集成对应云服务的部署会返回明确错误，不影响基础聊天功能。
+- **上传上限**：单文件 10MB（InfinityFree 限制），已同步到 `UPLOAD_MAX_BYTES`。
+- **无 cron / 无常驻进程**：所有清理、状态更新均按请求触发。

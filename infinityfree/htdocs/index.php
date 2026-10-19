@@ -49,7 +49,7 @@ if ($path === '') {
  * Apache 环境下 /uploads、/assets 由 .htaccess 直接返回，不会进到这里。 */
 if (php_sapi_name() === 'cli-server') {
     $full = __DIR__ . $path;
-    if ($path !== '/' && is_file($full) && !preg_match('/\.php$/i', $full)) {
+    if ($path !== '/' && $path !== '/index.php' && is_file($full)) {
         return false;
     }
 }
@@ -76,9 +76,28 @@ function jc_read_body()
     return is_array($data) ? $data : array();
 }
 
+/* ------------------------------ 判断是否 API 请求 ------------------------------ */
+$isApi = ($path === '/api' || strpos($path, '/api/') === 0);
+
 /* ------------------------------ API 分发 ------------------------------ */
-if ($path === '/api' || strpos($path, '/api/') === 0) {
-    require_once __DIR__ . '/lib/bootstrap.php';
+if ($isApi) {
+    // 数据库初始化（建表 + 种子数据）。失败时必须给出明确提示，而不是空白 500。
+    $bootError = null;
+    try {
+        require_once __DIR__ . '/lib/bootstrap.php';
+    } catch (Throwable $e) {
+        $bootError = $e;
+    }
+    if ($bootError !== null) {
+        http_response_code(503);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(array(
+            'error' => '数据库未配置或连接失败，请打开 /install.php 完成一键安装。',
+            'detail' => $bootError->getMessage(),
+            'install' => true,
+        ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
 
     // 健康检查
     if ($method === 'GET' && $path === '/api/health') {
@@ -120,6 +139,14 @@ if ($path === '/api' || strpos($path, '/api/') === 0) {
 }
 
 /* ------------------------------ SPA 前端兜底 ------------------------------ */
+// 尚未安装（缺少 config.local.php）→ 引导到安装向导
+if ($path !== '/install.php'
+    && !is_file(__DIR__ . '/lib/config.local.php')
+    && is_file(__DIR__ . '/install.php')) {
+    header('Location: ./install.php');
+    exit;
+}
+
 $indexHtml = __DIR__ . '/index.html';
 if (is_file($indexHtml)) {
     header('Content-Type: text/html; charset=utf-8');
