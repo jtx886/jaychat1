@@ -286,7 +286,11 @@ function seed_official()
         );
         $grp = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
     } else {
-        db_run('UPDATE `groups` SET `owner_id` = ?, `name` = ? WHERE `id` = ?', array((int) $official['id'], jc_official_group_name(), (int) $grp['id']));
+        // 一并回写公告：旧库若在 latin1 字符集下建表，中文会被存成 ???，这里顺手修复
+        db_run(
+            'UPDATE `groups` SET `owner_id` = ?, `name` = ?, `announcement` = ? WHERE `id` = ?',
+            array((int) $official['id'], jc_official_group_name(), '欢迎加入 Jay Chat 官方群，文明聊天，有问题可以 @Jay AI 提问。', (int) $grp['id'])
+        );
         $grp = db_one('SELECT * FROM `groups` WHERE `id` = ?', array((int) $grp['id']));
     }
 

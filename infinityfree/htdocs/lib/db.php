@@ -34,6 +34,13 @@ function db()
         // 让整型列以原生 PHP int 返回（而非字符串）
         $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
         $pdo->setAttribute(PDO::ATTR_STRINGIFY_FETCHES, false);
+        // 连接与表的字符集/排序规则必须一致：主机默认字符集可能是 latin1，
+        // 若连接是 utf8mb4 而与 latin1 列比较就会报 1267 Illegal mix of collations。
+        try {
+            $pdo->exec('SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci');
+        } catch (Exception $e) {
+            // 该排序规则不可用时忽略，DSN 的 charset 仍然生效
+        }
     }
     return $pdo;
 }
@@ -162,6 +169,14 @@ function db_install()
                 db()->exec($sql);
             } catch (Exception $e) {
                 // 索引已存在忽略
+            }
+        }
+        // 修复：若旧库建表时未指定字符集（主机默认为 latin1），这里强制转成 utf8mb4
+        foreach (jc_schema_convert_sql($driver) as $sql) {
+            try {
+                db()->exec($sql);
+            } catch (Exception $e) {
+                // 已是 utf8mb4 或无权限时忽略
             }
         }
         // 轻量迁移：老库补齐新列

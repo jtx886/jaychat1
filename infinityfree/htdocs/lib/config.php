@@ -108,5 +108,6 @@ function jc_official_account()
 /** 数据库 schema 版本（用于自检/安装判定） */
 function jc_schema_version()
 {
-    return 1;
+    // v2：强制所有表使用 utf8mb4，修复 latin1 默认字符集主机上的 1267 报错
+    return 2;
 }

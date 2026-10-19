@@ -307,7 +307,10 @@ function jc_create_table_sql($name, $def, $driver)
         $lines[] = 'PRIMARY KEY (' . implode(', ', $quoted) . ')';
     }
 
-    return 'CREATE TABLE IF NOT EXISTS `' . $name . '` (' . implode(', ', $lines) . ')';
+    // 关键：显式指定 utf8mb4，否则在默认字符集为 latin1 的主机上
+    // （如 InfinityFree）会建出 latin1 表，与 utf8mb4 参数比较时报 1267。
+    $opts = ($driver === 'sqlite') ? '' : ' DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
+    return 'CREATE TABLE IF NOT EXISTS `' . $name . '` (' . implode(', ', $lines) . ')' . $opts;
 }
 
 /** 全部建表语句 */
@@ -330,4 +333,20 @@ function jc_schema_indexes($driver)
         'CREATE INDEX ' . $ine . 'idx_events_user ON `events` (`user_id`, `id`)',
         'CREATE INDEX ' . $ine . 'idx_verify_email ON `verify_codes` (`email`)',
     );
+}
+
+/**
+ * 把既有表强制转成 utf8mb4（修复在 latin1 默认字符集主机上已建好的旧库）。
+ * sqlite 无需处理。
+ */
+function jc_schema_convert_sql($driver)
+{
+    if ($driver === 'sqlite') {
+        return array();
+    }
+    $sql = array();
+    foreach (jc_schema_tables() as $name => $def) {
+        $sql[] = 'ALTER TABLE `' . $name . '` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
+    }
+    return $sql;
 }
