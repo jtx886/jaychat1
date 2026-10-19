@@ -10,7 +10,7 @@ export const isAndroid = () => isNative() && window.Capacitor?.getPlatform?.() =
 const POLL_MS = Number(import.meta.env.VITE_POLL_INTERVAL || 3000);
 
 /** App 内置默认服务器地址（打包进 APK，免手填） */
-const BUILTIN_BASE = 'https://jaychat-330497-11-1391073131.sh.run.tcloudbase.com';
+const BUILTIN_BASE = 'http://jaychat.ct.ws';
 
 /** 服务器地址：优先本地设置 > 构建时注入 > App 内置 > 同源（网页版） */
 export function getBase() {
