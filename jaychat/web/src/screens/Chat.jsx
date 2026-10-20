@@ -442,6 +442,49 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     }
   };
 
+  /* ---------- @提及整体删除（像微信/QQ：先删空格，再整段删 @xxx） ---------- */
+  const mentionTokens = useMemo(() => {
+    const names = [aiName, ...(members || []).map((m) => m.username)].filter(Boolean);
+    // 长名优先，避免「@ab」误匹配到「@abc」里的前缀
+    return Array.from(new Set(names)).sort((a, b) => b.length - a.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiName, members]);
+
+  /** 退格键：命中 @提及 时整体处理，返回是否已消费本次按键 */
+  const handleMentionBackspace = (e) => {
+    if (e.key !== 'Backspace') return false;
+    const el = e.target;
+    const pos = el.selectionStart;
+    // 无选区、光标不在开头才处理；有选区时交给默认行为（删除选中内容）
+    if (pos == null || pos !== el.selectionEnd || pos === 0) return false;
+    const val = el.value;
+    const before = val.slice(0, pos);
+    // 1) 光标紧跟「@xxx + 空格」：先只删掉这个空格
+    if (before.endsWith(' ')) {
+      const head = before.slice(0, -1);
+      if (mentionTokens.some((nm) => head.endsWith('@' + nm))) {
+        e.preventDefault();
+        setText(val.slice(0, pos - 1) + val.slice(pos));
+        requestAnimationFrame(() => {
+          el.selectionStart = el.selectionEnd = pos - 1;
+        });
+        return true;
+      }
+    }
+    // 2) 光标紧跟「@xxx」：整段删除
+    const hit = mentionTokens.find((nm) => before.endsWith('@' + nm));
+    if (hit) {
+      e.preventDefault();
+      const start = pos - hit.length - 1;
+      setText(val.slice(0, start) + val.slice(pos));
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = start;
+      });
+      return true;
+    }
+    return false;
+  };
+
   const onInputChange = (e) => {
     const v = e.target.value;
     setText(v);
@@ -723,6 +766,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             value={text}
             onChange={onInputChange}
             onKeyDown={(e) => {
+              if (handleMentionBackspace(e)) return;
               if (e.key === 'Enter' && !e.shiftKey && !mentionOpen) {
                 e.preventDefault();
                 sendText(text);
