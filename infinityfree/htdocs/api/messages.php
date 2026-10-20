@@ -156,6 +156,11 @@ route('POST', '#^/api/upload$#', function ($params, $body) {
         @mkdir($dir, 0777, true);
     }
     $filename = now_ms() . '_' . bin2hex(random_bytes(6)) . $ext;
+    // 视频统一追加 .dat 后缀：部分共享主机（如 InfinityFree）会按扩展名限制/清理视频文件，
+    // 改由 /api/media 以正确的 Content-Type 输出，避免直接访问 .mp4 被拦截。
+    if ($isVideo) {
+        $filename .= '.dat';
+    }
     $dest = $dir . '/' . $filename;
     if (!@move_uploaded_file($f['tmp_name'], $dest)) {
         return array(400, array('error' => '上传失败'));
@@ -169,6 +174,94 @@ route('POST', '#^/api/upload$#', function ($params, $body) {
         'mime' => $mime,
     ));
 });
+
+/* ------------------------------- 媒体输出 -------------------------------
+ * GET /api/media?f=YYYYMM/xxx.mp4.dat
+ * 以正确的 MIME 输出 uploads 下的文件，支持 Range（视频拖动进度条必需）。
+ * 视频文件在磁盘上以 .dat 结尾，避免个别主机按扩展名拦截 .mp4。
+ */
+route('GET', '#^/api/media$#', function ($params, $body) {
+    $rel = isset($_GET['f']) ? (string) $_GET['f'] : '';
+    $rel = str_replace('\\', '/', trim($rel));
+    if ($rel === '' || strpos($rel, '..') !== false || substr($rel, 0, 1) === '/') {
+        return array(400, array('error' => '参数不合法'));
+    }
+    $root = realpath(JC_HTDOCS . '/uploads');
+    $full = realpath(JC_HTDOCS . '/uploads/' . $rel);
+    if (!$root || !$full || strpos($full, $root . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) {
+        return array(404, array('error' => '文件不存在或已被服务器清理'));
+    }
+
+    $size = (int) filesize($full);
+    $mime = jc_media_mime($full);
+    header('Content-Type: ' . $mime);
+    header('Accept-Ranges: bytes');
+    header('Cache-Control: public, max-age=604800');
+    header('Access-Control-Allow-Origin: *');
+
+    $start = 0;
+    $end = $size > 0 ? $size - 1 : 0;
+    $range = isset($_SERVER['HTTP_RANGE']) ? (string) $_SERVER['HTTP_RANGE'] : '';
+    if ($range !== '' && preg_match('/bytes=(\d*)-(\d*)/', $range, $m)) {
+        if ($m[1] === '' && $m[2] !== '') {
+            $start = max(0, $size - (int) $m[2]);
+        } else {
+            $start = (int) $m[1];
+            if ($m[2] !== '') {
+                $end = min((int) $m[2], $size - 1);
+            }
+        }
+        if ($size === 0 || $start > $end || $start >= $size) {
+            http_response_code(416);
+            header('Content-Range: bytes */' . $size);
+            exit;
+        }
+        http_response_code(206);
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
+    }
+    header('Content-Length: ' . ($size === 0 ? 0 : $end - $start + 1));
+
+    $fp = @fopen($full, 'rb');
+    if (!$fp) {
+        http_response_code(404);
+        exit;
+    }
+    if ($size > 0) {
+        fseek($fp, $start);
+        $left = $end - $start + 1;
+        while ($left > 0 && !feof($fp)) {
+            $chunk = fread($fp, min(65536, $left));
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            echo $chunk;
+            $left -= strlen($chunk);
+            @flush();
+        }
+    }
+    fclose($fp);
+    exit;
+});
+
+/** 根据扩展名推断 MIME（.dat 时取前一段扩展名，例如 xxx.mp4.dat → mp4） */
+function jc_media_mime($path)
+{
+    $name = strtolower((string) $path);
+    if (substr($name, -4) === '.dat') {
+        $name = substr($name, 0, -4);
+    }
+    $ext = (string) pathinfo($name, PATHINFO_EXTENSION);
+    $map = array(
+        'mp4' => 'video/mp4', 'm4v' => 'video/mp4', 'mov' => 'video/quicktime',
+        'webm' => 'video/webm', 'ogv' => 'video/ogg', 'avi' => 'video/x-msvideo',
+        'mkv' => 'video/x-matroska', '3gp' => 'video/3gpp', 'flv' => 'video/x-flv',
+        'wmv' => 'video/x-ms-wmv', 'mpeg' => 'video/mpeg', 'mpg' => 'video/mpeg',
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp',
+        'svg' => 'image/svg+xml',
+    );
+    return isset($map[$ext]) ? $map[$ext] : 'application/octet-stream';
+}
 
 /* ------------------------------- 会话列表 ------------------------------- */
 

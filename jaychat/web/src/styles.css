@@ -347,6 +347,12 @@ body {
 .msg-row.mine .bubble-meta { justify-content: flex-end; }
 .bubble-media { border-radius: 16px; overflow: hidden; max-width: 220px; display: block; }
 .bubble-media img, .bubble-media video { width: 100%; display: block; }
+.video-fail {
+  min-width: 170px; min-height: 110px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; padding: 14px;
+  font-size: 12.5px; font-weight: 700; color: var(--text-2);
+  background: rgba(255, 255, 255, .05); border: 1px dashed rgba(255, 255, 255, .18); border-radius: 14px;
+}
 .one-time-tag {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800;
   color: #ffd479; background: rgba(255, 184, 77, .16); border: 1px solid rgba(255, 184, 77, .36);

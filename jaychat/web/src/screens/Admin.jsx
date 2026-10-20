@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api, mediaUrl } from '../api.js';
 import { useApp } from '../App.jsx';
-import { Avatar, TopBar, ActionSheet, MediaPicker, toast, Spinner, Empty } from '../components/ui.jsx';
+import { Avatar, TopBar, ActionSheet, MediaPicker, toast, Spinner, Empty, VideoPlayer } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 
 const TABS = [
@@ -576,10 +576,20 @@ function ChatMessages({ target, onBack }) {
                   <span className="hint" style={{ marginLeft: 'auto' }}>{fmtTime(m.created_at)}</span>
                 </div>
                 <div className={'admin-chat-bubble' + (m.recalled ? ' recalled' : '')}>
+                  {m.one_time ? (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                      <span className="badge-soft">一次性</span>
+                      {m.burned_by?.length ? (
+                        <span className="badge-soft" style={{ color: '#ffb020', borderColor: 'rgba(255,176,32,.42)' }}>
+                          已销毁 · 原文保留
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {m.recalled ? <span className="admin-recall-tag">已撤回</span> : null}
                   {!m.recalled && (m.msg_type === 'image' || m.msg_type === 'video') && m.media_url ? (
                     m.msg_type === 'video' ? (
-                      <video src={mediaUrl(m.media_url)} controls playsInline style={{ maxWidth: 200, borderRadius: 10 }} />
+                      <VideoPlayer src={mediaUrl(m.media_url)} style={{ maxWidth: 200, borderRadius: 10 }} />
                     ) : (
                       <img src={mediaUrl(m.media_url)} alt="" loading="lazy" style={{ maxWidth: 200, borderRadius: 10 }} />
                     )

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ws, mediaUrl, getBase } from '../api.js';
 import { useApp } from '../App.jsx';
 import {
-  Avatar, TopBar, Sheet, ActionSheet, toast, Spinner, MediaViewer, MediaPicker, CameraPicker, Empty,
+  Avatar, TopBar, Sheet, ActionSheet, toast, Spinner, MediaViewer, MediaPicker, CameraPicker, Empty, VideoPlayer,
 } from '../components/ui.jsx';
 import EmojiPanel, { StickerView } from '../components/EmojiPanel.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
@@ -39,6 +39,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [mq, setMq] = useState(''); // @ 面板搜索词
   const [aiName, setAiName] = useState('Jay AI');
   const [aiAvatar, setAiAvatar] = useState('');
+  // 本机发出的 @AI 提问：先本地插入「正在思考」，避免等轮询（3 秒）才看到反馈
+  const [aiPending, setAiPending] = useState(null);
+  const aiPendingTimer = useRef(null);
   const [onlineSheet, setOnlineSheet] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [oneTime, setOneTime] = useState(false);
@@ -293,6 +296,33 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     }
   };
 
+  /* ---------- @AI「正在思考」本地占位 ---------- */
+  const clearAiPending = () => {
+    if (aiPendingTimer.current) {
+      clearTimeout(aiPendingTimer.current);
+      aiPendingTimer.current = null;
+    }
+    setAiPending(null);
+  };
+
+  const startAiPending = (askerName) => {
+    if (aiPendingTimer.current) clearTimeout(aiPendingTimer.current);
+    setAiPending({
+      id: `local-ai-${Date.now()}`,
+      conv_type: convType,
+      conv_id: String(convId),
+      sender_id: 0,
+      sender: { id: 0, username: aiName, avatar: aiAvatar },
+      msg_type: 'text',
+      content: `@${askerName} ${aiName} 正在思考中…`,
+      extra: { ai: true, pending: true },
+      created_at: Date.now(),
+    });
+    setTimeout(scrollToBottom, 60);
+    // 兜底：90 秒后仍未拿到回复则收起占位
+    aiPendingTimer.current = setTimeout(() => setAiPending(null), 90000);
+  };
+
   /* ---------- 实时事件 ---------- */
   useEffect(() => {
     const offs = [];
@@ -300,6 +330,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       ws.on('message', (m) => {
         if (`${m.conv_type}_${m.conv_id}` !== convKey) return;
         setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
+        // 服务端已插入 AI 消息（思考占位/回复）→ 移除本地占位
+        if (m.sender_id === 0) clearAiPending();
         setTimeout(scrollToBottom, 40);
         // 我正停留在该会话页面，对方此时 @ 我：直接记为已处理，
         // 避免我随后发言（使 @ 消息不再是最后一条）后又弹出「有人@我」按钮
@@ -319,6 +351,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       ws.on('message:update', (m) => {
         if (`${m.conv_type}_${m.conv_id}` !== convKey) return;
         setMessages((list) => list.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
+        if (m.sender_id === 0) clearAiPending();
       }),
     );
     offs.push(
@@ -350,7 +383,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       reloadGroup();
     }));
     offs.push(ws.on('group:muted', (d) => d.groupId === Number(convId) && toast(d.mute_until ? `你已被禁言 ${fmtDuration(d.mute_until - Date.now())}` : '你已被解除禁言')));
-    return () => offs.forEach((o) => o());
+    return () => {
+      offs.forEach((o) => o());
+      if (aiPendingTimer.current) clearTimeout(aiPendingTimer.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [convKey, me?.id]);
 
@@ -379,9 +415,15 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       setText('');
       setReplyMsg(null);
       setTimeout(scrollToBottom, 40);
-      // 群里 @ Jay AI 提问：消息发出后再异步触发机器人回复（不阻塞发送）
+      // 群里 @ Jay AI 提问：立即本地显示「正在思考」，再异步触发机器人回复
       if (isGroup && msgType === 'text' && mentionsAi(body, aiName)) {
-        api.post('/api/ai/ask', { groupId: Number(convId), question: body }).catch(() => {});
+        startAiPending(me.username);
+        api
+          .post('/api/ai/ask', { groupId: Number(convId), question: body }, { timeout: 120000 })
+          .catch(() => {
+            clearAiPending();
+            toast('AI 暂时没有回应，请稍后再试', 'error');
+          });
       }
     } catch (e) {
       toast(e.message, 'error');
@@ -410,8 +452,16 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     }
   };
 
+  const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
+
   const pickFiles = (files) => {
-    setPendingFiles(files.map((f) => ({ file: f, url: URL.createObjectURL(f), type: isVideoFile(f) ? 'video' : 'image' })));
+    const list = Array.from(files || []);
+    const ok = list.filter((f) => f.size <= MAX_MEDIA_BYTES);
+    if (ok.length < list.length) {
+      toast('文件超过 10MB：免费主机上传后会无法保存/播放，请先压缩再发送', 'error');
+    }
+    if (!ok.length) return;
+    setPendingFiles(ok.map((f) => ({ file: f, url: URL.createObjectURL(f), type: isVideoFile(f) ? 'video' : 'image' })));
     setOneTime(false);
     setOneTimeSec('5');
     setPanel('confirm');
@@ -653,7 +703,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                     <div style={{ fontSize: 12.5, fontWeight: 700 }}>一次性消息，点击查看</div>
                   </div>
                 ) : m.msg_type === 'video' ? (
-                  <video src={mediaUrl(m.media_url)} controls playsInline preload="metadata" />
+                  <VideoPlayer src={mediaUrl(m.media_url)} />
                 ) : (
                   <img src={mediaUrl(m.media_url)} alt="" loading="lazy" />
                 )}
@@ -662,6 +712,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
               <img className="bubble-sticker" src={mediaUrl(m.media_url)} alt="" loading="lazy" />
             ) : sticker ? (
               <StickerView text={sticker} />
+            ) : m.extra?.pending && Date.now() - m.created_at > 60000 ? (
+              // 服务端占位消息长时间未更新（例如接口超时）→ 不再一直显示「正在思考」
+              <span className="dim">{senderName} 暂时没有回应，请稍后再试</span>
             ) : (
               <span>{m.content}</span>
             )}
@@ -679,6 +732,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       </div>
     );
   };
+
+  /* 本地「AI 正在思考」占位：服务端已插入近期占位消息时以服务端为准，避免重复气泡 */
+  const hasServerPending = messages.some((m) => m.extra?.pending && Date.now() - m.created_at < 90000);
+  const renderList = aiPending && !hasServerPending ? [...messages, aiPending] : messages;
 
   return (
     <div className="page" style={{ height: '100%' }}>
@@ -714,10 +771,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       <div className="chat-scroll" ref={scrollRef}>
         {loading ? (
           <div className="empty"><Spinner size={22} /></div>
-        ) : messages.length === 0 ? (
+        ) : renderList.length === 0 ? (
           <Empty icon="message" text="还没有消息，打个招呼吧" />
         ) : (
-          messages.map(renderMessage)
+          renderList.map(renderMessage)
         )}
       </div>
 

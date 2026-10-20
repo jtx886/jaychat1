@@ -30,10 +30,19 @@ export function setBase(url) {
   ws.connect();
 }
 
-/** 媒体地址补全（后端返回 /uploads/xxx） */
+/** 视频扩展名（含服务端统一追加的 .dat 包装） */
+const VIDEO_URL_RE = /\.(mp4|m4v|mov|webm|ogv|avi|mkv|3gp|flv|wmv|mpe?g)(\.dat)?$/i;
+
+/** 媒体地址补全（后端返回 /uploads/xxx）
+ *  视频走 /api/media 输出：保证 Content-Type 正确、支持 Range 拖动，
+ *  且避免个别共享主机按 .mp4 扩展名拦截或清理文件。 */
 export function mediaUrl(u) {
   if (!u) return '';
   if (/^(https?:)?\/\//.test(u) || u.startsWith('data:') || u.startsWith('blob:')) return u;
+  const clean = u.split('#')[0];
+  if (clean.startsWith('/uploads/') && VIDEO_URL_RE.test(clean)) {
+    return getBase() + '/api/media?f=' + encodeURIComponent(clean.slice('/uploads/'.length));
+  }
   return getBase() + u;
 }
 

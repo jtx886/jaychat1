@@ -200,6 +200,52 @@ export function Loading({ text = '加载中…' }) {
   );
 }
 
+/* ============================ 视频播放器 ============================ */
+/** 视频播放：加载失败时给出可重试的提示，避免只显示一块黑屏 */
+export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
+  const [err, setErr] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  useEffect(() => {
+    setErr(false);
+    setNonce(0);
+  }, [src]);
+  if (err) {
+    return (
+      <div
+        className={'video-fail' + (className ? ' ' + className : '')}
+        style={style}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Icon name="video" size={22} strokeWidth={1.8} />
+        <span>视频加载失败</span>
+        <button
+          className="btn btn-sm"
+          onClick={() => {
+            setErr(false);
+            setNonce(Date.now());
+          }}
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+  const url = nonce ? src + (src.includes('?') ? '&' : '?') + 'r=' + nonce : src;
+  return (
+    <video
+      src={url}
+      className={className}
+      style={style}
+      controls
+      autoPlay={autoPlay}
+      playsInline
+      preload="metadata"
+      onClick={onClick}
+      onError={() => setErr(true)}
+    />
+  );
+}
+
 /* ============================ 媒体查看器 ============================ */
 export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn, burnSec }) {
   const [revealed, setRevealed] = useState(!oneTimeView);
@@ -226,7 +272,7 @@ export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn, b
     <div className="media-viewer" onClick={onClose}>
       {revealed ? (
         isVideo ? (
-          <video src={url} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
+          <VideoPlayer src={url} autoPlay onClick={(e) => e.stopPropagation()} />
         ) : (
           <img src={url} alt="" onClick={(e) => e.stopPropagation()} />
         )

@@ -153,7 +153,7 @@ route('GET', '#^/api/groups/(\d+)$#', function ($params, $body) {
             'kick' => ($role === 'owner'),
             'set_admin' => ($role === 'owner'),
             'mute' => ($role === 'owner' || $role === 'admin'),
-            'transfer' => ($role === 'owner'),
+            'transfer' => ($role === 'owner' && empty($g['is_official'])),
             'invite' => true,
             'quit' => (!empty($g['is_official']) ? false : ($role !== 'owner')),
             // 解散：仅群主、且非官方群、且当前未解散
@@ -318,6 +318,9 @@ route('POST', '#^/api/groups/(\d+)/transfer$#', function ($params, $body) {
     }
     if ((int) $g['owner_id'] !== (int) $uid) {
         return array(403, array('error' => '只有群主可以转让'));
+    }
+    if (!empty($g['is_official'])) {
+        return array(400, array('error' => '官方群不能转让'));
     }
     $target = isset($body['userId']) ? (int) $body['userId'] : 0;
     if (!$target || !member_role($gid, $target)) {
