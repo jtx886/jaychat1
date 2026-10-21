@@ -329,8 +329,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     offs.push(
       ws.on('message', (m) => {
         if (`${m.conv_type}_${m.conv_id}` !== convKey) return;
+        if (m.sender_id === 0 && m.extra?.pending) {
+          // 服务端刚插入「思考中」占位：保留本地气泡不动，避免两个气泡来回替换闪烁
+          setTimeout(scrollToBottom, 40);
+          return;
+        }
         setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
-        // 服务端已插入 AI 消息（思考占位/回复）→ 移除本地占位
+        // AI 正式回复到达 → 在同一帧替换本地「正在思考」气泡
         if (m.sender_id === 0) clearAiPending();
         setTimeout(scrollToBottom, 40);
         // 我正停留在该会话页面，对方此时 @ 我：直接记为已处理，
@@ -350,8 +355,18 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     offs.push(
       ws.on('message:update', (m) => {
         if (`${m.conv_type}_${m.conv_id}` !== convKey) return;
+        if (m.sender_id === 0) {
+          // 仍是服务端思考占位 → 忽略，继续用本地气泡，避免闪烁
+          if (m.extra?.pending) return;
+          // 思考占位被更新为正式回复：同一次渲染里移除本地气泡并插入回复
+          clearAiPending();
+          setMessages((list) => (list.some((x) => x.id === m.id)
+            ? list.map((x) => (x.id === m.id ? { ...x, ...m } : x))
+            : [...list, m]));
+          setTimeout(scrollToBottom, 40);
+          return;
+        }
         setMessages((list) => list.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
-        if (m.sender_id === 0) clearAiPending();
       }),
     );
     offs.push(
@@ -733,9 +748,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     );
   };
 
-  /* 本地「AI 正在思考」占位：服务端已插入近期占位消息时以服务端为准，避免重复气泡 */
-  const hasServerPending = messages.some((m) => m.extra?.pending && Date.now() - m.created_at < 90000);
-  const renderList = aiPending && !hasServerPending ? [...messages, aiPending] : messages;
+  /* 本地「AI 正在思考」占位：思考期间隐藏服务端占位，只保留一个稳定的本地气泡 */
+  const renderList = useMemo(() => {
+    if (!aiPending) return messages;
+    return [...messages.filter((m) => !m.extra?.pending), aiPending];
+  }, [messages, aiPending]);
 
   return (
     <div className="page" style={{ height: '100%' }}>

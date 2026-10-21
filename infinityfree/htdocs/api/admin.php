@@ -421,3 +421,157 @@ route('GET', '#^/api/ai/profile$#', function ($params, $body) {
     require_auth();
     return array(200, array('profile' => jc_ai_public()));
 });
+
+/* ---------------------------- 用户 IP / 拉黑 ---------------------------- */
+
+/** IP 封禁行转展示结构 */
+function admin_ip_block_row($b)
+{
+    return array(
+        'ip' => (string) $b['ip'],
+        'reason' => isset($b['reason']) ? (string) $b['reason'] : '',
+        'until' => (int) $b['until'],
+        'created_at' => (int) $b['created_at'],
+        'created_by' => (int) (isset($b['created_by']) ? $b['created_by'] : 0),
+    );
+}
+
+/**
+ * 用户 IP 列表（实时）。
+ * 返回：每个用户的最近真实 IP、最后活跃时间、在线状态、请求次数，以及全站封禁列表。
+ */
+route('GET', '#^/api/admin/ips$#', function ($params, $body) {
+    jc_require_admin();
+
+    $q = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
+    $onlineOnly = !empty($_GET['online']);
+    $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 200;
+    if ($limit < 1 || $limit > 500) {
+        $limit = 200;
+    }
+    $now = now_ms();
+    $onlineSince = $now - 60000;
+
+    $where = array();
+    $args = array();
+    if ($q !== '') {
+        $where[] = '(`username` LIKE ? OR `last_ip` LIKE ?)';
+        $args[] = '%' . $q . '%';
+        $args[] = '%' . $q . '%';
+    }
+    if ($onlineOnly) {
+        $where[] = '`last_poll` > ?';
+        $args[] = $onlineSince;
+    }
+    $sql = 'SELECT `id`, `username`, `avatar`, `is_official`, `role`, `online`, `last_seen`, `last_poll`, '
+        . '`last_ip`, `last_ip_at`, `last_ua` FROM `users`'
+        . ($where ? (' WHERE ' . implode(' AND ', $where)) : '')
+        . ' ORDER BY `last_ip_at` DESC, `last_seen` DESC LIMIT ' . (int) $limit;
+    $rows = db_all($sql, $args);
+
+    // 封禁表（有效期内）
+    $blocks = db_all('SELECT * FROM `ip_blocks` ORDER BY `created_at` DESC');
+    $blockMap = array();
+    $activeBlocks = array();
+    foreach ($blocks as $b) {
+        $until = (int) $b['until'];
+        if ($until > 0 && $until <= $now) {
+            continue;
+        }
+        $blockMap[(string) $b['ip']] = $until;
+        $activeBlocks[] = admin_ip_block_row($b);
+    }
+
+    // 该 IP 的累计请求次数（聚合）
+    $hitMap = array();
+    if (!empty($rows)) {
+        $ips = array();
+        foreach ($rows as $u) {
+            $ip = (string) $u['last_ip'];
+            if ($ip !== '') {
+                $ips[$ip] = true;
+            }
+        }
+        if (!empty($ips)) {
+            $ipList = array_keys($ips);
+            $place = implode(',', array_fill(0, count($ipList), '?'));
+            $hr = db_all('SELECT `ip`, SUM(`hits`) AS `hits` FROM `ip_records` WHERE `ip` IN (' . $place . ') GROUP BY `ip`', $ipList);
+            foreach ($hr as $h) {
+                $hitMap[(string) $h['ip']] = (int) $h['hits'];
+            }
+        }
+    }
+
+    $list = array();
+    foreach ($rows as $u) {
+        $ip = (string) $u['last_ip'];
+        $list[] = array(
+            'id' => (int) $u['id'],
+            'username' => (string) $u['username'],
+            'avatar' => (string) $u['avatar'],
+            'is_official' => !empty($u['is_official']),
+            'is_admin' => jc_is_admin($u),
+            'online' => ((int) $u['last_poll']) > $onlineSince,
+            'last_seen' => (int) $u['last_seen'],
+            'ip' => $ip,
+            'ip_at' => (int) $u['last_ip_at'],
+            'ua' => (string) $u['last_ua'],
+            'hits' => isset($hitMap[$ip]) ? $hitMap[$ip] : 0,
+            'blocked' => isset($blockMap[$ip]),
+            'block_until' => isset($blockMap[$ip]) ? $blockMap[$ip] : 0,
+        );
+    }
+
+    $d = new DateTime('now', new DateTimeZone('UTC'));
+    $d->setTime(0, 0, 0);
+    $todayStart = (int) $d->getTimestamp() * 1000;
+
+    return array(200, array(
+        'users' => $list,
+        'blocks' => $activeBlocks,
+        'stats' => array(
+            'users' => (int) db_value('SELECT COUNT(*) FROM `users`'),
+            'today_ips' => (int) db_value('SELECT COUNT(DISTINCT `ip`) FROM `ip_records` WHERE `last_seen` >= ?', array($todayStart)),
+            'online' => (int) db_value('SELECT COUNT(*) FROM `users` WHERE `last_poll` > ?', array($onlineSince)),
+            'blocked' => count($activeBlocks),
+        ),
+        'my_ip' => jc_client_ip(),
+    ));
+});
+
+/** 拉黑 IP（days=0 永久） */
+route('POST', '#^/api/admin/ips/block$#', function ($params, $body) {
+    $adminId = jc_require_admin();
+    $ip = isset($body['ip']) ? trim((string) $body['ip']) : '';
+    $reason = isset($body['reason']) ? mb_substr(trim((string) $body['reason']), 0, 190, 'UTF-8') : '';
+    $days = isset($body['days']) ? (int) $body['days'] : 0;
+
+    if (!jc_valid_ip($ip) || $ip === '0.0.0.0') {
+        return array(400, array('error' => 'IP 地址不合法'));
+    }
+    if ($ip === jc_client_ip()) {
+        return array(400, array('error' => '不能拉黑当前登录 IP（会把自己也挡在门外）'));
+    }
+    $until = $days > 0 ? now_ms() + $days * 86400000 : 0;
+
+    $exist = db_one('SELECT `ip` FROM `ip_blocks` WHERE `ip` = ?', array($ip));
+    if ($exist) {
+        db_run('UPDATE `ip_blocks` SET `reason` = ?, `until` = ?, `created_by` = ?, `created_at` = ? WHERE `ip` = ?',
+            array($reason, $until, $adminId, now_ms(), $ip));
+    } else {
+        db_run('INSERT INTO `ip_blocks` (`ip`, `reason`, `until`, `created_by`, `created_at`) VALUES (?, ?, ?, ?, ?)',
+            array($ip, $reason, $until, $adminId, now_ms()));
+    }
+    return array(200, array('ok' => true, 'ip' => $ip, 'until' => $until));
+});
+
+/** 解除 IP 拉黑 */
+route('POST', '#^/api/admin/ips/unblock$#', function ($params, $body) {
+    jc_require_admin();
+    $ip = isset($body['ip']) ? trim((string) $body['ip']) : '';
+    if (!jc_valid_ip($ip)) {
+        return array(400, array('error' => 'IP 地址不合法'));
+    }
+    db_run('DELETE FROM `ip_blocks` WHERE `ip` = ?', array($ip));
+    return array(200, array('ok' => true, 'ip' => $ip));
+});

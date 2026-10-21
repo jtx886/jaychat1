@@ -456,6 +456,8 @@ body {
   border-radius: 999px; font-size: 13.5px; font-weight: 700; color: var(--text-2); cursor: pointer;
   background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .07);
   transition: transform .16s var(--ease-spring), color .2s, background .2s;
+  font-family: inherit; appearance: none; -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent; user-select: none;
 }
 .moment-act:active { transform: scale(.95); }
 .moment-act.liked { color: #ff8fa6; background: rgba(255, 95, 122, .14); border-color: rgba(255, 95, 122, .3); }

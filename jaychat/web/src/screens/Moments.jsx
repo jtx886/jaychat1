@@ -27,12 +27,17 @@ export default function MomentsScreen({ scope = 'all' }) {
     load(tab);
   }, [tab, load]);
 
-  // 实时：有新动态 / 动态更新时刷新
+  // 实时：新动态才重新拉取；点赞/评论等更新直接原地替换，避免整页重载造成跳动
   useEffect(() => {
     const offs = [
       ws.on('moment:new', () => load(tab)),
-      ws.on('moment:update', () => load(tab)),
-      ws.on('moment:delete', () => load(tab)),
+      ws.on('moment:update', (d) => {
+        if (!d?.id) return;
+        setMoments((list) => (list.some((x) => x.id === d.id) ? list.map((x) => (x.id === d.id ? d : x)) : list));
+      }),
+      ws.on('moment:delete', (d) => {
+        if (d?.id) setMoments((list) => list.filter((x) => x.id !== d.id));
+      }),
     ];
     return () => offs.forEach((o) => o());
   }, [tab, load]);
@@ -40,6 +45,7 @@ export default function MomentsScreen({ scope = 'all' }) {
   const like = async (m) => {
     try {
       const d = await api.post(`/api/moments/${m.id}/like`, {});
+      // 只替换被点赞的这一条，不重载整页，避免页面跳动
       setMoments((list) => list.map((x) => (x.id === m.id ? d.moment : x)));
     } catch (e) {
       toast(e.message, 'error');

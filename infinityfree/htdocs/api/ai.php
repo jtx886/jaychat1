@@ -25,6 +25,8 @@ function jc_insert_ai_message($gid, $content, $extra)
 // Jay AI 提问：任意群聊中 @Jay AI 均可触发（需为群成员）
 route('POST', '#^/api/ai/ask$#', function ($params, $body) {
     $uid = require_auth();
+    // 防止恶意刷 AI 接口消耗额度：单用户 5 分钟最多 20 次
+    jc_rate_limit('ai_ask', 20, 300000, 'user:' . $uid);
     $gid = isset($body['groupId']) ? (int) $body['groupId'] : 0;
     $question = isset($body['question']) ? mb_substr((string) $body['question'], 0, 500, 'UTF-8') : '';
     $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));

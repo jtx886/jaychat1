@@ -39,7 +39,17 @@ export default function UserMomentsScreen({ userId, mine }) {
   }, [load]);
 
   useEffect(() => {
-    const offs = [ws.on('moment:update', load), ws.on('moment:new', load), ws.on('moment:delete', load)];
+    const offs = [
+      // 点赞/评论等更新原地替换，不重载整页，避免页面跳动
+      ws.on('moment:update', (d) => {
+        if (!d?.id) return;
+        setMoments((list) => (list.some((x) => x.id === d.id) ? list.map((x) => (x.id === d.id ? d : x)) : list));
+      }),
+      ws.on('moment:new', () => load()),
+      ws.on('moment:delete', (d) => {
+        if (d?.id) setMoments((list) => list.filter((x) => x.id !== d.id));
+      }),
+    ];
     return () => offs.forEach((o) => o());
   }, [load]);
 

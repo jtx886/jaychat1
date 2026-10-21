@@ -4,21 +4,46 @@
   SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
 </IfModule>
 
+# 安全响应头（静态资源也生效；动态接口由 index.php 再输出一份）
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(self), payment=()"
+  Header always unset X-Powered-By
+</IfModule>
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
 
-  # 1) API 统一交给 index.php 分发（/api、/api/、/api/health ...）
+  # 1) 敏感目录与隐藏文件一律拒绝（lib 内含数据库配置，绝不可被直接访问）
+  RewriteRule ^(lib|database)(/|$) - [F,L]
+  RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+  # 2) API 统一交给 index.php 分发（/api、/api/、/api/health ...）
   RewriteRule ^api(/|$) index.php [L,QSA]
 
-  # 2) 已存在的文件/目录直接访问（/uploads/*、/assets/*、前端构建产物）
+  # 3) 入口页面也走 index.php，确保被封禁 IP 无法打开站点
+  RewriteRule ^index\.html$ index.php [L]
+
+  # 4) 已存在的文件/目录直接访问（/uploads/*、/assets/*、前端构建产物）
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # 3) 其余任意路径 → SPA 前端路由兜底
-  RewriteRule ^ index.html [L]
+  # 5) 其余任意路径 → SPA 前端路由兜底
+  RewriteRule ^ index.php [L]
 </IfModule>
+
+# 首页优先由 PHP 处理（用于 IP 黑名单拦截）
+DirectoryIndex index.php index.html
 
 # 禁止目录列出
 Options -Indexes
+
+# 禁止 TRACE 等危险方法
+<IfModule mod_rewrite.c>
+  RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK)$ [NC]
+  RewriteRule ^ - [F,L]
+</IfModule>

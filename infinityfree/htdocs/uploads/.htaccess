@@ -1,7 +1,13 @@
 # 上传目录：禁止执行任何脚本，防止上传可执行文件被访问
-<FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh|shtml|htaccess)$">
+<FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh|shtml|htaccess|svg)$">
   Require all denied
 </FilesMatch>
 
 # 禁止目录列出
 Options -Indexes
+
+# 不允许把上传文件当脚本/HTML 解析
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Content-Security-Policy "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
+</IfModule>

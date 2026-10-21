@@ -8,6 +8,8 @@ const JC_VISIBILITIES = array('public', 'private', 'friends', 'custom', 'exclude
 // 发布动态
 route('POST', '#^/api/moments$#', function ($params, $body) {
     $uid = require_auth();
+    // 防刷屏：单用户每分钟最多 10 条动态
+    jc_rate_limit('moment_post', 10, 60000, 'user:' . $uid);
     $text = isset($body['text']) ? $body['text'] : '';
     $media = (isset($body['media']) && is_array($body['media'])) ? $body['media'] : array();
     $visibility = isset($body['visibility']) ? $body['visibility'] : 'public';
@@ -185,6 +187,8 @@ route('POST', '#^/api/moments/(\d+)/like$#', function ($params, $body) {
 // 评论 / 回复（支持文字、图片、视频、表情、动画表情包）
 route('POST', '#^/api/moments/(\d+)/comments$#', function ($params, $body) {
     $uid = require_auth();
+    // 防刷评论：单用户每分钟最多 30 条
+    jc_rate_limit('moment_comment', 30, 60000, 'user:' . $uid);
     $id = (int) $params[0];
     $m = db_one('SELECT * FROM `moments` WHERE `id` = ? AND `deleted` = 0', array($id));
     if (!$m) {

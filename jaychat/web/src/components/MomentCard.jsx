@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { api, mediaUrl } from '../api.js';
 import { Avatar, ActionSheet, toast } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
@@ -9,6 +9,7 @@ import { useApp } from '../App.jsx';
 export default function MomentCard({ moment, onOpen, onLike, showCommentPreview = true, onDeleted }) {
   const { openUser, push } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
+  const likeBusy = useRef(false);
   const m = moment;
   const media = (m.media || []).filter((x) => x.url);
   const nCls = media.length === 1 ? 'n1' : media.length === 2 || media.length === 4 ? 'n2' : 'n3';
@@ -72,18 +73,31 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
       ) : null}
 
       <div className="moment-actions">
-        <div className={'moment-act' + (m.liked ? ' liked' : '')} onClick={() => onLike?.(m)}>
+        {/* 点赞是独立按钮：阻止冒泡到卡片/详情，避免点「赞」被误判为打开详情 */}
+        <button
+          type="button"
+          className={'moment-act' + (m.liked ? ' liked' : '')}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (likeBusy.current) return;
+            likeBusy.current = true;
+            Promise.resolve(onLike?.(m)).finally(() => {
+              likeBusy.current = false;
+            });
+          }}
+        >
           <Icon name="heart" size={18} strokeWidth={1.9} filled={m.liked} color={m.liked ? '#ff8fa6' : undefined} />
           <span>{m.likes?.length ? `${m.likes.length} 赞` : '赞'}</span>
-        </div>
-        <div className="moment-act" onClick={() => onOpen?.('detail')}>
+        </button>
+        <button type="button" className="moment-act" onClick={() => onOpen?.('detail')}>
           <Icon name="message" size={18} strokeWidth={1.9} />
           <span>{m.comments?.length ? `${m.comments.length} 评论` : '评论'}</span>
-        </div>
-        <div className="moment-act" onClick={() => onOpen?.('detail')}>
+        </button>
+        <button type="button" className="moment-act" onClick={() => onOpen?.('detail')}>
           <Icon name="info" size={18} strokeWidth={1.9} />
           <span>详情</span>
-        </div>
+        </button>
       </div>
 
       {showCommentPreview && m.comments?.length ? (

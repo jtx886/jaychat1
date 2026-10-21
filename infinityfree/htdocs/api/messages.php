@@ -140,17 +140,21 @@ function jc_upload_type($tmp, $clientExt)
         'video/x-flv' => '.flv', 'video/x-ms-wmv' => '.wmv', 'video/mpeg' => '.mpeg',
     );
     if (isset($imageMap[$mime])) {
-        return array('kind' => 'image', 'ext' => $imageMap[$mime]);
+        return array('kind' => 'image', 'ext' => $imageMap[$mime], 'mime' => $mime);
     }
     if (isset($videoMap[$mime])) {
-        return array('kind' => 'video', 'ext' => $videoMap[$mime]);
+        return array('kind' => 'video', 'ext' => $videoMap[$mime], 'mime' => $mime);
     }
     // 主机未开启 fileinfo 时，退化为扩展名白名单（仍拒绝脚本类扩展名）
     $allowed = array_merge(array_values($imageMap), array_values($videoMap), JC_VIDEO_EXT);
     $clientExt = strtolower((string) $clientExt);
     if (in_array($clientExt, $allowed, true)) {
         $isVideo = in_array($clientExt, JC_VIDEO_EXT, true);
-        return array('kind' => $isVideo ? 'video' : 'image', 'ext' => $clientExt);
+        return array(
+            'kind' => $isVideo ? 'video' : 'image',
+            'ext' => $clientExt,
+            'mime' => $isVideo ? 'video/mp4' : 'image/jpeg',
+        );
     }
     return null;
 }
@@ -185,12 +189,18 @@ route('POST', '#^/api/upload$#', function ($params, $body) {
     }
 
     $original = isset($f['name']) ? (string) $f['name'] : '';
-    $ext = strtolower((string) pathinfo($original, PATHINFO_EXTENSION));
-    $ext = $ext !== '' ? ('.' . substr($ext, 0, 10)) : '.bin';
+    $clientExt = strtolower((string) pathinfo($original, PATHINFO_EXTENSION));
+    $clientExt = $clientExt !== '' ? ('.' . substr($clientExt, 0, 10)) : '';
 
-    $mime = isset($f['type']) ? (string) $f['type'] : '';
-    $isVideo = (strpos($mime, 'video') === 0) || in_array($ext, JC_VIDEO_EXT, true);
-    $kind = $isVideo ? 'video' : 'image';
+    // 以真实文件内容判定类型，扩展名由服务端决定，避免上传 .php/.svg 等危险文件
+    $info = jc_upload_type($f['tmp_name'], $clientExt);
+    if (!$info) {
+        return array(400, array('error' => '不支持的文件类型（仅支持图片与视频）'));
+    }
+    $kind = $info['kind'];
+    $ext = $info['ext'];
+    $mime = $info['mime'];
+    $isVideo = $kind === 'video';
 
     $sub = date('Ym');
     $dir = JC_HTDOCS . '/uploads/' . $sub;
@@ -532,6 +542,8 @@ route('GET', '#^/api/messages$#', function ($params, $body) {
 
 route('POST', '#^/api/messages$#', function ($params, $body) {
     $uid = require_auth();
+    // 防刷屏/灌水：单用户每分钟最多 60 条消息
+    jc_rate_limit('message_send', 60, 60000, 'user:' . $uid);
     $convType = isset($body['convType']) ? $body['convType'] : null;
     $convId = isset($body['convId']) ? $body['convId'] : null;
     $msgType = isset($body['msg_type']) && $body['msg_type'] !== '' ? $body['msg_type'] : 'text';

@@ -22,6 +22,8 @@ route('GET', '#^/api/friends$#', function ($params, $body) {
 // 发送好友申请
 route('POST', '#^/api/friends/request$#', function ($params, $body) {
     $uid = require_auth();
+    // 防骚扰：单用户每小时最多 20 次好友申请
+    jc_rate_limit('friend_request', 20, 3600000, 'user:' . $uid);
     $to = isset($body['toUserId']) ? (int) $body['toUserId'] : 0;
     $message = isset($body['message']) ? mb_substr((string) $body['message'], 0, 60, 'UTF-8') : '';
     if (!$to || $to === $uid) {

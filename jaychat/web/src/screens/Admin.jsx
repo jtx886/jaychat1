@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api, mediaUrl } from '../api.js';
 import { useApp } from '../App.jsx';
-import { Avatar, TopBar, ActionSheet, MediaPicker, toast, Spinner, Empty, VideoPlayer } from '../components/ui.jsx';
+import { Avatar, TopBar, ActionSheet, Sheet, Switch, MediaPicker, toast, Spinner, Empty, VideoPlayer } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 
 const TABS = [
   { key: 'overview', name: '总览', icon: 'globe' },
   { key: 'ai', name: 'AI 配置', icon: 'robot' },
   { key: 'users', name: '用户管理', icon: 'users' },
+  { key: 'ips', name: '用户IP', icon: 'shield' },
   { key: 'chatlog', name: '聊天记录', icon: 'message' },
 ];
 
@@ -70,6 +71,7 @@ export default function AdminScreen() {
         {tab === 'overview' ? <Overview /> : null}
         {tab === 'ai' ? <AiConfig /> : null}
         {tab === 'users' ? <UserManager /> : null}
+        {tab === 'ips' ? <IpManager /> : null}
         {tab === 'chatlog' ? <ChatLog /> : null}
       </div>
     </div>
@@ -800,6 +802,244 @@ function ChatLog() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* ============================== 用户 IP ============================== */
+
+const IP_BLOCK_OPTIONS = [
+  { label: '永久', days: 0 },
+  { label: '1 天', days: 1 },
+  { label: '7 天', days: 7 },
+  { label: '30 天', days: 30 },
+];
+
+function IpManager() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [auto, setAuto] = useState(true);
+  const [target, setTarget] = useState(null); // 待拉黑的用户行
+  const [unblockTarget, setUnblockTarget] = useState(null);
+  const [reason, setReason] = useState('');
+  const [days, setDays] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const qRef = useRef('');
+  qRef.current = q;
+
+  const load = async (silent) => {
+    if (!silent) setLoading(true);
+    try {
+      const d = await api.get(`/api/admin/ips?q=${encodeURIComponent(qRef.current)}`);
+      setData(d);
+    } catch (e) {
+      if (!silent) toast(e.message, 'error');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 每 5 秒自动刷新，IP 与在线状态保持实时
+  useEffect(() => {
+    if (!auto) return () => {};
+    const t = setInterval(() => load(true), 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
+
+  const openBlock = (u) => {
+    setTarget(u);
+    setReason('');
+    setDays(0);
+  };
+
+  const doBlock = async () => {
+    if (!target?.ip) return;
+    setBusy(true);
+    try {
+      await api.post('/api/admin/ips/block', { ip: target.ip, days, reason });
+      toast(days > 0 ? `已拉黑 ${target.ip}，${days} 天后自动解除` : `已永久拉黑 ${target.ip}`, 'info');
+      setTarget(null);
+      load(true);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doUnblock = async () => {
+    const ip = unblockTarget?.ip;
+    if (!ip) return;
+    try {
+      await api.post('/api/admin/ips/unblock', { ip });
+      toast(`已解除对 ${ip} 的拉黑`, 'info');
+      setUnblockTarget(null);
+      load(true);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  const stats = data?.stats || {};
+  const users = data?.users || [];
+
+  return (
+    <div className="mx mt">
+      <div className="admin-stats" style={{ padding: 0 }}>
+        <StatTile icon="users" tone="mint" label="在线用户" value={stats.online ?? 0} sub="60 秒内有请求" />
+        <StatTile icon="globe" tone="brand" label="今日独立 IP" value={stats.today_ips ?? 0} />
+        <StatTile icon="shield" tone="rose" label="已拉黑 IP" value={stats.blocked ?? 0} />
+        <div className="glass pad admin-stat">
+          <IconTile name="server" tone="violet" box={36} size={18} />
+          <div className="admin-stat-val" style={{ fontSize: 15, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+            {data?.my_ip || '—'}
+          </div>
+          <div className="admin-stat-label">我的 IP</div>
+          <div className="hint" style={{ fontSize: 11 }}>请勿拉黑该 IP</div>
+        </div>
+      </div>
+
+      <div className="glass pad mt">
+        <div className="flex gap8">
+          <input
+            className="input grow"
+            placeholder="搜索用户名 / IP"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') load();
+            }}
+          />
+          <button className="btn btn-primary" onClick={() => load()}>
+            <Icon name="search" size={17} strokeWidth={2} />
+          </button>
+        </div>
+        <div className="flex" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+          <span className="hint">真实 IP 实时更新，每 5 秒自动刷新</span>
+          <span className="flex gap6" style={{ alignItems: 'center' }}>
+            <Switch on={auto} onChange={setAuto} />
+            <span className="hint">自动刷新</span>
+          </span>
+        </div>
+      </div>
+
+      {loading && !data ? (
+        <div className="center" style={{ padding: '30px 0' }}><Spinner size={24} /></div>
+      ) : (
+        <div className="glass mx mt">
+          <div className="list">
+            {users.map((u) => (
+              <div key={u.id} className="list-item" style={{ alignItems: 'flex-start' }}>
+                <Avatar user={{ id: u.id, username: u.username, avatar: u.avatar, is_official: u.is_official }} size={42} />
+                <div className="list-main">
+                  <div className="list-title">
+                    {u.username}
+                    {u.is_official ? <span className="badge-soft" style={{ marginLeft: 6 }}>官方</span> : null}
+                    {u.is_admin ? <span className="badge-soft" style={{ marginLeft: 6 }}>管理员</span> : null}
+                    {u.online ? (
+                      <span className="tag-online" style={{ marginLeft: 8 }}><i />在线</span>
+                    ) : null}
+                  </div>
+                  <div className="list-desc" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 }}>
+                    {u.ip || '尚未记录到 IP'}
+                    {u.blocked ? <span className="badge-soft" style={{ marginLeft: 8, color: '#ff9dad' }}>已拉黑</span> : null}
+                  </div>
+                  <div className="hint" style={{ marginTop: 3 }}>
+                    最后活跃 {fmtTime(u.ip_at || u.last_seen)} · 请求 {u.hits} 次
+                  </div>
+                </div>
+                <div style={{ flex: '0 0 auto', paddingTop: 2 }}>
+                  {u.blocked ? (
+                    <button className="btn btn-sm" onClick={() => setUnblockTarget(u)}>解除拉黑</button>
+                  ) : u.ip ? (
+                    <button className="btn btn-sm btn-danger" onClick={() => openBlock(u)}>拉黑</button>
+                  ) : (
+                    <span className="hint">—</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!users.length ? <Empty icon="shield" text="暂无 IP 记录，用户访问后会自动出现" /> : null}
+          </div>
+        </div>
+      )}
+
+      {data?.blocks?.length ? (
+        <>
+          <div className="section-head">已拉黑的 IP</div>
+          <div className="glass mx">
+            <div className="list">
+              {data.blocks.map((b) => (
+                <div key={b.ip} className="list-item">
+                  <IconTile name="ban" tone="rose" box={36} size={17} />
+                  <div className="list-main">
+                    <div className="list-title" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13.5 }}>{b.ip}</div>
+                    <div className="list-desc">
+                      {b.until > 0 ? `到期：${fmtTime(b.until)}` : '永久拉黑'}
+                      {b.reason ? ` · ${b.reason}` : ''}
+                    </div>
+                  </div>
+                  <button className="btn btn-sm" onClick={() => setUnblockTarget({ ip: b.ip })}>解除</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      <Sheet open={!!target} onClose={() => setTarget(null)} title={target ? `拉黑 IP · ${target.ip}` : ''}>
+        {target ? (
+          <div className="pad">
+            <div className="hint">
+              拉黑后该 IP 将无法打开本站页面，也无法调用任何接口。请确认不是自己的网络。
+            </div>
+            <div className="emoji-tabs" style={{ marginTop: 12 }}>
+              {IP_BLOCK_OPTIONS.map((o) => (
+                <div
+                  key={o.days}
+                  className={'emoji-tab' + (days === o.days ? ' active' : '')}
+                  onClick={() => setDays(o.days)}
+                >
+                  {o.label}
+                </div>
+              ))}
+            </div>
+            <input
+              className="input mt"
+              placeholder="拉黑原因（可选，仅管理员可见）"
+              value={reason}
+              maxLength={60}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="hint" style={{ marginTop: 8 }}>
+              用户：{target.username} · 最后活跃 {fmtTime(target.ip_at || target.last_seen)}
+            </div>
+            <button className="btn btn-danger btn-block mt" disabled={busy} onClick={doBlock}>
+              {busy ? '处理中…' : '确认拉黑该 IP'}
+            </button>
+          </div>
+        ) : null}
+      </Sheet>
+
+      <ActionSheet
+        open={!!unblockTarget}
+        onClose={() => setUnblockTarget(null)}
+        title={unblockTarget ? `解除拉黑 ${unblockTarget.ip || ''}` : ''}
+        actions={[
+          {
+            label: '解除拉黑，允许该 IP 访问',
+            danger: true,
+            onClick: doUnblock,
+          },
+        ]}
+      />
     </div>
   );
 }
