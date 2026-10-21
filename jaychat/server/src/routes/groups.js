@@ -184,6 +184,8 @@ router.post('/:id/set-admin', (req, res) => {
 // 禁言 / 解除禁言（群主、管理员），可自定义时长（秒），0 表示解除
 router.post('/:id/mute', (req, res) => {
   const gid = Number(req.params.id);
+  const g = db.prepare('SELECT * FROM groups WHERE id = ?').get(gid);
+  if (!g) return res.status(404).json({ error: '群聊不存在' });
   const role = memberRole(gid, req.uid);
   if (role !== 'owner' && role !== 'admin') return res.status(403).json({ error: '没有权限' });
   const uid = Number(req.body?.userId);
