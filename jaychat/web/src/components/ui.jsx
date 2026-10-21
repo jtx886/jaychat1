@@ -242,24 +242,29 @@ export function SmartImage({ src, alt = '', className, style, ...rest }) {
 }
 
 /* ============================ 视频播放器 ============================ */
-/** 视频播放：加载失败时给出可重试的提示，避免只显示一块黑屏 */
+/** 视频播放：
+ *  - 统一走 /api/media（正确的 Content-Type + Range 支持）
+ *  - /api/media 失效时自动降级 /uploads 直链重试
+ *  - 仍失败显示「视频加载失败 + 重试」，绝不留一块黑屏
+ */
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
   const [err, setErr] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [useDirect, setUseDirect] = useState(false);
+  const primary = mediaUrl(src);
   useEffect(() => {
     setErr(false);
     setNonce(0);
     setUseDirect(false);
-  }, [src]);
-  // /api/media 偶发不可用时，自动改用 /uploads 直链重试一次
+  }, [primary]);
+  // 从 /api/media?f=xxx 反解出 /uploads/xxx 直链，作为降级地址
   const direct = (() => {
-    const s = String(src || '');
+    const s = String(primary || '');
     const marker = '/api/media?f=';
     const i = s.indexOf(marker);
     if (i < 0) return '';
     try {
-      return s.slice(0, i) + '/uploads/' + decodeURIComponent(s.slice(i + marker.length));
+      return s.slice(0, i) + '/uploads/' + decodeURIComponent(s.slice(i + marker.length).split('#')[0]);
     } catch {
       return '';
     }
@@ -285,7 +290,7 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       </div>
     );
   }
-  const base = useDirect && direct ? direct : src;
+  const base = useDirect && direct ? direct : primary;
   const url = nonce ? base + (base.includes('?') ? '&' : '?') + 'r=' + nonce : base;
   return (
     <video
