@@ -35,13 +35,17 @@ function route($method, $pattern, $handler)
 function jc_dispatch($method, $path, $body)
 {
     $method = strtoupper($method);
-    foreach ($GLOBALS['JC_ROUTES'] as $r) {
-        if ($r[0] !== $method) {
-            continue;
-        }
-        if (preg_match($r[1], $path, $m)) {
-            $params = array_slice($m, 1);
-            return call_user_func($r[2], $params, $body);
+    // 部分共享主机/WAF 会拦截 PATCH，前端统一改用 POST；这里做兼容分发。
+    $tries = ($method === 'POST') ? array('POST', 'PATCH') : array($method);
+    foreach ($tries as $verb) {
+        foreach ($GLOBALS['JC_ROUTES'] as $r) {
+            if ($r[0] !== $verb) {
+                continue;
+            }
+            if (preg_match($r[1], $path, $m)) {
+                $params = array_slice($m, 1);
+                return call_user_func($r[2], $params, $body);
+            }
         }
     }
     throw new ApiException(404, '接口不存在');

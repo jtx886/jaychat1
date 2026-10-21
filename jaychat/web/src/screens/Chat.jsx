@@ -76,7 +76,31 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     setLoading(true);
     try {
       const d = await api.get(`/api/messages?convType=${convType}&convId=${convId}&limit=80`);
-      setMessages(d.messages || []);
+      const list = d.messages || [];
+      setMessages(list);
+      // 进入会话并加载历史：其中最新的 @ 视为已看到，避免随后发言又弹出「有人@我」
+      if (isGroup) {
+        let latestMention = 0;
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (mentionMe(list[i])) {
+            latestMention = list[i].id;
+            break;
+          }
+        }
+        if (latestMention) {
+          const key = `jc_mention_ack_${convKey}`;
+          let stored = 0;
+          try {
+            stored = Number(localStorage.getItem(key)) || 0;
+          } catch {}
+          if (latestMention > stored) {
+            setMentionAck(latestMention);
+            try {
+              localStorage.setItem(key, String(latestMention));
+            } catch {}
+          }
+        }
+      }
       if (isGroup) {
         const g = await api.get(`/api/groups/${convId}`);
         setMembers(g.members || []);
@@ -471,6 +495,18 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
       setText('');
       setReplyMsg(null);
+      // 发言时用户就在会话内：把已有的 @ 一并标记为已读，避免发完消息又出现「有人@我」
+      if (isGroup && lastMentionId) {
+        let stored = 0;
+        try {
+          stored = Number(localStorage.getItem(mentionAckKey)) || 0;
+        } catch {}
+        const ack = Math.max(stored, lastMentionId);
+        setMentionAck(ack);
+        try {
+          localStorage.setItem(mentionAckKey, String(ack));
+        } catch {}
+      }
       setTimeout(scrollToBottom, 40);
       // 群里 @ Jay AI 提问：先拉一次最新配置（管理员可能刚改过 AI 名称），再本地显示「正在思考」
       if (isGroup && msgType === 'text') {

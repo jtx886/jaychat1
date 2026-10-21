@@ -461,7 +461,7 @@ route('GET', '#^/api/admin/ips$#', function ($params, $body) {
     $now = now_ms();
     $onlineSince = $now - 60000;
 
-    $where = array();
+    $where = array('`is_official` = 0'); // 官方账号不作为普通用户展示
     $args = array();
     if ($q !== '') {
         $where[] = '(`username` LIKE ? OR `last_ip` LIKE ?)';
@@ -539,9 +539,9 @@ route('GET', '#^/api/admin/ips$#', function ($params, $body) {
         'users' => $list,
         'blocks' => $activeBlocks,
         'stats' => array(
-            'users' => (int) db_value('SELECT COUNT(*) FROM `users`'),
+            'users' => (int) db_value('SELECT COUNT(*) FROM `users` WHERE `is_official` = 0'),
             'today_ips' => (int) db_value('SELECT COUNT(DISTINCT `ip`) FROM `ip_records` WHERE `last_seen` >= ?', array($todayStart)),
-            'online' => (int) db_value('SELECT COUNT(*) FROM `users` WHERE `last_poll` > ?', array($onlineSince)),
+            'online' => (int) db_value('SELECT COUNT(*) FROM `users` WHERE `last_poll` > ? AND `is_official` = 0', array($onlineSince)),
             'blocked' => count($activeBlocks),
         ),
         'my_ip' => jc_client_ip(),

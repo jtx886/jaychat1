@@ -6,7 +6,9 @@
 /** Jay AI 人格设定 */
 function jc_ai_system_prompt()
 {
-    return '你是「Jay AI」，Jay Chat 官方群里的智能机器人，性格热情、简洁、靠谱。'
+    $conf = jc_ai_conf();
+    $name = isset($conf['name']) && $conf['name'] !== '' ? $conf['name'] : 'Jay AI';
+    return '你是「' . $name . '」，Jay Chat 官方群里的智能机器人，性格热情、简洁、靠谱。'
         . '用中文回答，语气自然友好，回答尽量简短清晰，不要长篇大论，不要使用 Markdown 标题。';
 }
 
@@ -44,8 +46,11 @@ route('POST', '#^/api/ai/ask$#', function ($params, $body) {
     $asker = public_user(get_user($uid));
     $askerName = $asker ? $asker['username'] : '用户';
 
+    $conf = jc_ai_conf();
+    $aiName = isset($conf['name']) && $conf['name'] !== '' ? $conf['name'] : 'Jay AI';
+
     // 1) 先发一条「正在思考」占位
-    $thinking = jc_insert_ai_message($gid, '@' . $askerName . ' Jay AI 正在思考中…', array('ai' => true, 'pending' => true));
+    $thinking = jc_insert_ai_message($gid, '@' . $askerName . ' ' . $aiName . ' 正在思考中…', array('ai' => true, 'pending' => true));
     event_to_group_members($gid, 'message', $thinking);
 
     // 2) 组装上下文（取最近 12 条）
@@ -70,7 +75,9 @@ route('POST', '#^/api/ai/ask$#', function ($params, $body) {
         }
     }
 
-    $prompt = trim(preg_replace('/@?\s*jay\s*ai\s*[:：,，]?/iu', '', $question));
+    // 去掉开头的 @提及（可能是自定义 AI 名称）以及旧版写死的 jay ai
+    $prompt = trim(preg_replace('/^@\S+\s*/u', '', $question));
+    $prompt = trim(preg_replace('/@?\s*jay\s*ai\s*[:：,，]?/iu', '', $prompt));
     if ($prompt === '') {
         $prompt = '你好';
     }

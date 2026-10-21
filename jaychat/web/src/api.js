@@ -108,7 +108,9 @@ export async function http(path, { method = 'GET', body, token, raw, timeout } =
 export const api = {
   get: (p, o) => http(p, o),
   post: (p, b, o) => http(p, { ...o, method: 'POST', body: b }),
-  patch: (p, b, o) => http(p, { ...o, method: 'PATCH', body: b }),
+  // 部分共享主机/WAF 会拦截 PATCH/DELETE 等非常用方法，统一改用 POST，
+  // 后端路由对 POST 做了 PATCH 兼容分发。
+  patch: (p, b, o) => http(p, { ...o, method: 'POST', body: b }),
   del: (p, o) => http(p, { ...o, method: 'DELETE' }),
   upload: (file, kind) => {
     const fd = new FormData();

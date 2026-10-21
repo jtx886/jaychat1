@@ -82,7 +82,10 @@ function jc_http_request($method, $url, $opts = array())
 }
 
 /**
- * 调用 AI 接口（OpenAI 兼容 /chat/completions）。
+ * 调用 AI 接口。
+ * 自动兼容两种协议：
+ *   1) OpenAI Chat Completions：POST /v1/chat/completions  {messages:[...]}
+ *   2) OpenAI Responses API：POST /v1/responses  {instructions, input}（腾讯 TokenHub 等）
  * @param array $messages [{role,content}, ...]
  * @return array{ok:bool, text?:string, error?:string}
  */
@@ -92,13 +95,49 @@ function jc_ai_chat($messages)
     if ($conf['url'] === '' || $conf['key'] === '') {
         return array('ok' => false, 'error' => 'AI 未配置');
     }
-    $payload = array(
-        'model' => $conf['model'],
-        'messages' => $messages,
-        'temperature' => 0.7,
-        'max_tokens' => 800,
-        'stream' => false,
-    );
+    $messages = is_array($messages) ? $messages : array();
+    // URL 以 /responses 结尾 → 走 Responses API
+    $isResponses = (bool) preg_match('#/responses/?(\?.*)?$#i', $conf['url']);
+
+    if ($isResponses) {
+        $instructions = array();
+        $input = array();
+        foreach ($messages as $m) {
+            $role = isset($m['role']) ? (string) $m['role'] : 'user';
+            $content = isset($m['content']) ? (string) $m['content'] : '';
+            if ($content === '') {
+                continue;
+            }
+            if ($role === 'system') {
+                $instructions[] = $content;
+            } else {
+                $input[] = array(
+                    'role' => ($role === 'assistant' ? 'assistant' : 'user'),
+                    'content' => $content,
+                );
+            }
+        }
+        // 单轮提问用字符串，与 TokenHub 文档示例一致；多轮上下文用消息数组
+        $inputPayload = (count($input) === 1 && $input[0]['role'] === 'user') ? $input[0]['content'] : $input;
+        if ($inputPayload === array()) {
+            $inputPayload = '你好';
+        }
+        $payload = array(
+            'model' => $conf['model'],
+            'instructions' => $instructions ? implode("\n", $instructions) : 'You are a helpful assistant.',
+            'input' => $inputPayload,
+            'stream' => false,
+        );
+    } else {
+        $payload = array(
+            'model' => $conf['model'],
+            'messages' => $messages,
+            'temperature' => 0.7,
+            'max_tokens' => 800,
+            'stream' => false,
+        );
+    }
+
     $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
     $r = jc_http_request('POST', $conf['url'], array(
         'headers' => array(
@@ -109,7 +148,16 @@ function jc_ai_chat($messages)
         'timeout' => 45,
     ));
     if (!$r['ok']) {
-        return array('ok' => false, 'error' => $r['error'] ? $r['error'] : ('接口返回 ' . $r['status']));
+        // 尽量把接口返回的错误原因带给管理员，方便排查配置
+        $detail = '';
+        $jb = json_decode((string) $r['body'], true);
+        if (is_array($jb) && isset($jb['error'])) {
+            $detail = is_array($jb['error']) && isset($jb['error']['message'])
+                ? (string) $jb['error']['message']
+                : (is_string($jb['error']) ? $jb['error'] : '');
+        }
+        $detail = mb_substr(trim($detail), 0, 200, 'UTF-8');
+        return array('ok' => false, 'error' => $r['error'] ? $r['error'] : ('接口返回 ' . $r['status'] . ($detail !== '' ? '：' . $detail : '')));
     }
     $data = json_decode($r['body'], true);
     if (!is_array($data)) {
@@ -119,10 +167,38 @@ function jc_ai_chat($messages)
         $msg = is_array($data['error']) && isset($data['error']['message']) ? $data['error']['message'] : (string) $data['error'];
         return array('ok' => false, 'error' => $msg);
     }
+
     $text = '';
-    if (isset($data['choices'][0]['message']['content'])) {
+    // Responses API：顶层 output_text（部分平台提供）
+    if (isset($data['output_text']) && is_string($data['output_text'])) {
+        $text = $data['output_text'];
+    }
+    // Responses API：output[].content[].text
+    if ($text === '' && isset($data['output']) && is_array($data['output'])) {
+        $buf = array();
+        foreach ($data['output'] as $item) {
+            if (!is_array($item) || !isset($item['content']) || !is_array($item['content'])) {
+                continue;
+            }
+            foreach ($item['content'] as $c) {
+                if (!is_array($c)) {
+                    continue;
+                }
+                $type = isset($c['type']) ? (string) $c['type'] : '';
+                if ($type === 'output_text' || $type === 'text' || $type === '') {
+                    if (isset($c['text']) && is_string($c['text'])) {
+                        $buf[] = $c['text'];
+                    }
+                }
+            }
+        }
+        $text = implode("\n", $buf);
+    }
+    // Chat Completions
+    if ($text === '' && isset($data['choices'][0]['message']['content'])) {
         $text = (string) $data['choices'][0]['message']['content'];
-    } elseif (isset($data['choices'][0]['text'])) {
+    }
+    if ($text === '' && isset($data['choices'][0]['text'])) {
         $text = (string) $data['choices'][0]['text'];
     }
     $text = trim($text);
