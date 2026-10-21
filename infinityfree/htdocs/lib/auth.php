@@ -25,6 +25,64 @@ function verify_password($pwd, $stored)
     return password_verify((string) $pwd, $stored);
 }
 
+/**
+ * 稳定获取 JWT 签名密钥。
+ *
+ * 修复「每次更新/重装都要重新登录」：install.php 之前每次重装都会生成新的随机密钥，
+ * 导致旧 token 全部失效。改为把密钥持久化到 jc_meta 表，升级/重装后仍沿用旧密钥。
+ *
+ * 优先级：
+ *   1) 配置中显式设置的非默认密钥（管理员手动指定）——直接使用并固化到数据库；
+ *   2) 数据库中已持久化的密钥——升级/重装后继续沿用，登录态不丢；
+ *   3) 首次自动生成一个随机密钥并持久化。
+ */
+function jc_jwt_secret()
+{
+    static $secret = null;
+    if ($secret !== null) {
+        return $secret;
+    }
+    $default = 'jaychat-dev-secret-change-me';
+    $cfg = jc_config('JWT_SECRET');
+
+    // 管理员手动指定了密钥（非默认值）：以配置为准，并同步写入数据库固化
+    if (is_string($cfg) && $cfg !== '' && $cfg !== $default) {
+        try {
+            $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('jwt_secret'));
+            if ($row === null) {
+                db_exec_ignore('INSERT INTO `jc_meta` (`name`, `value`) VALUES (?, ?)', array('jwt_secret', $cfg));
+            } elseif ((string) (isset($row['value']) ? $row['value'] : '') !== $cfg) {
+                db_run('UPDATE `jc_meta` SET `value` = ? WHERE `name` = ?', array($cfg, 'jwt_secret'));
+            }
+        } catch (Exception $e) {
+            // 数据库不可用时不阻断签发/校验（罕见，仅安装初期）
+        }
+        $secret = $cfg;
+        return $secret;
+    }
+
+    // 否则优先使用数据库已持久化的密钥
+    try {
+        $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('jwt_secret'));
+        if ($row && isset($row['value']) && (string) $row['value'] !== '') {
+            $secret = (string) $row['value'];
+            return $secret;
+        }
+    } catch (Exception $e) {
+        // 首次安装时 jc_meta 尚未建表，忽略并走下方生成逻辑
+    }
+
+    // 首次：生成并持久化
+    $generated = bin2hex(random_bytes(32));
+    try {
+        db_exec_ignore('INSERT INTO `jc_meta` (`name`, `value`) VALUES (?, ?)', array('jwt_secret', $generated));
+    } catch (Exception $e) {
+        // 持久化失败也返回本次生成值，保证当期请求可用
+    }
+    $secret = $generated;
+    return $secret;
+}
+
 /** 签发 token */
 function sign_token($uid)
 {
@@ -32,7 +90,7 @@ function sign_token($uid)
         'uid' => (int) $uid,
         'exp' => now_ms() + jc_token_ttl(),
     )));
-    $sig = b64url_encode(hash_hmac('sha256', $payload, jc_config('JWT_SECRET'), true));
+    $sig = b64url_encode(hash_hmac('sha256', $payload, jc_jwt_secret(), true));
     return $payload . '.' . $sig;
 }
 
@@ -48,7 +106,7 @@ function verify_token($token)
     }
     $payload = $parts[0];
     $sig = $parts[1];
-    $expect = b64url_encode(hash_hmac('sha256', $payload, jc_config('JWT_SECRET'), true));
+    $expect = b64url_encode(hash_hmac('sha256', $payload, jc_jwt_secret(), true));
     if (!hash_equals($expect, $sig)) {
         return null;
     }

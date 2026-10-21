@@ -85,6 +85,14 @@ function jc_respond($status, $data)
 /* 读取 JSON 请求体（超过 2MB 直接拒绝，避免超大包拖垮共享主机） */
 function jc_read_body()
 {
+    // 多部分表单（文件上传）：文件已由 PHP 解析到 $_FILES，这里不做 2MB 限制，
+    // 否则图片/视频上传会被误判为「请求内容过大」。上传体积由 /api/upload 里的
+    // UPLOAD_MAX_BYTES（默认 10MB）单独校验。
+    $contentType = isset($_SERVER['CONTENT_TYPE']) ? (string) $_SERVER['CONTENT_TYPE'] : '';
+    if (stripos($contentType, 'multipart/form-data') === 0) {
+        return array();
+    }
+
     $len = isset($_SERVER['CONTENT_LENGTH']) ? (int) $_SERVER['CONTENT_LENGTH'] : 0;
     if ($len > 2 * 1024 * 1024) {
         http_response_code(413);

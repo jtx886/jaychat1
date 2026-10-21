@@ -85,7 +85,25 @@ if (!$installed && $isPost) {
 
     // 3) 写配置
     if (!$errors) {
-        $secret = $form['JWT_SECRET'] !== '' ? $form['JWT_SECRET'] : bin2hex(random_bytes(16));
+        $secret = $form['JWT_SECRET'];
+        if ($secret === '') {
+            // 重装场景：优先复用数据库里已持久化的密钥，避免每次重装都让所有用户重新登录。
+            // 首次安装时 jc_meta 表尚未创建，查询会抛异常而退回留空，由 lib/auth.php 首次使用时自动生成。
+            $existingSecret = null;
+            try {
+                $pdo = new PDO($dsn, $form['DB_USER'], $form['DB_PASS'], array(
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_TIMEOUT => 8,
+                ));
+                $q = $pdo->query("SELECT `value` FROM `jc_meta` WHERE `name` = 'jwt_secret'");
+                $r = $q ? $q->fetch(PDO::FETCH_ASSOC) : false;
+                if ($r && isset($r['value']) && (string) $r['value'] !== '') {
+                    $existingSecret = (string) $r['value'];
+                }
+            } catch (Exception $e) {
+            }
+            $secret = $existingSecret !== null ? $existingSecret : '';
+        }
         $cfg = "<?php\n"
             . "// 由 install.php 于 " . date('Y-m-d H:i:s') . " 自动生成，请勿手动提交到版本库\n"
             . "return array(\n"
