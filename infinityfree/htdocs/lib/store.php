@@ -382,7 +382,14 @@ function jc_file_backup($url, $maxBytes = 8388608)
     if ($url === '' || strpos($url, '/uploads/') !== 0 || strpos($url, '..') !== false) {
         return;
     }
-    if (db_one('SELECT `url` FROM `avatar_files` WHERE `url` = ?', array($url))) {
+    try {
+        if (db_one('SELECT `url` FROM `avatar_files` WHERE `url` = ?', array($url))) {
+            return;
+        }
+    } catch (Exception $e) {
+        // 备份表缺失/异常时静默跳过：备份是尽力而为，绝不能影响上传与头像保存主流程
+        return;
+    } catch (Throwable $e) {
         return;
     }
     $file = JC_HTDOCS . $url;
@@ -421,7 +428,13 @@ function jc_file_restore_to_disk($url)
     if ($url === '' || strpos($url, '/uploads/') !== 0 || strpos($url, '..') !== false) {
         return false;
     }
-    $row = db_one('SELECT `data` FROM `avatar_files` WHERE `url` = ?', array($url));
+    try {
+        $row = db_one('SELECT `data` FROM `avatar_files` WHERE `url` = ?', array($url));
+    } catch (Exception $e) {
+        return false;
+    } catch (Throwable $e) {
+        return false;
+    }
     if (!$row) {
         return false;
     }
@@ -440,7 +453,13 @@ function jc_file_restore_to_disk($url)
 /** 文件缺失时从数据库恢复并直接输出；返回是否已处理 */
 function jc_avatar_restore($url)
 {
-    $row = db_one('SELECT `mime`, `data` FROM `avatar_files` WHERE `url` = ?', array((string) $url));
+    try {
+        $row = db_one('SELECT `mime`, `data` FROM `avatar_files` WHERE `url` = ?', array((string) $url));
+    } catch (Exception $e) {
+        return false;
+    } catch (Throwable $e) {
+        return false;
+    }
     if (!$row) {
         return false;
     }
@@ -460,15 +479,19 @@ function jc_avatar_restore($url)
 /** 升级时把当前在用的上传文件统一备份一次 */
 function jc_avatar_backup_existing()
 {
-    foreach (db_all("SELECT `avatar` FROM `users` WHERE `avatar` LIKE '/uploads/%'") as $r) {
-        jc_avatar_backup($r['avatar']);
-    }
-    foreach (db_all("SELECT `avatar` FROM `groups` WHERE `avatar` LIKE '/uploads/%'") as $r) {
-        jc_avatar_backup($r['avatar']);
-    }
-    $ai = (string) jc_setting('ai_avatar', '');
-    if ($ai !== '') {
-        jc_avatar_backup($ai);
+    try {
+        foreach (db_all("SELECT `avatar` FROM `users` WHERE `avatar` LIKE '/uploads/%'") as $r) {
+            jc_avatar_backup($r['avatar']);
+        }
+        foreach (db_all("SELECT `avatar` FROM `groups` WHERE `avatar` LIKE '/uploads/%'") as $r) {
+            jc_avatar_backup($r['avatar']);
+        }
+        $ai = (string) jc_setting('ai_avatar', '');
+        if ($ai !== '') {
+            jc_avatar_backup($ai);
+        }
+    } catch (Exception $e) {
+    } catch (Throwable $e) {
     }
 }
 

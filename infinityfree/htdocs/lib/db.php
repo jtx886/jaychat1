@@ -136,6 +136,18 @@ function db_ensure_column($table, $column, $ddl)
     }
 }
 
+/** 检查数据表是否存在（用于建表自愈） */
+function db_table_exists($table)
+{
+    $driver = jc_config('DB_DRIVER');
+    if ($driver === 'sqlite') {
+        $r = db_one("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", array($table));
+        return $r !== null;
+    }
+    $r = db_one('SHOW TABLES LIKE ?', array($table));
+    return $r !== null;
+}
+
 /** 首次请求自检：表/索引/列缺失则自动创建（与 database/schema.sql 等价） */
 function db_install()
 {
@@ -149,10 +161,15 @@ function db_install()
     $need = true;
     try {
         $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('schema_version'));
-        if ($row !== null && (string) $row['value'] === $version) {
+        // 版本一致之外，还必须确认关键表真实存在：
+        // 某些主机曾出现「建表被静默拒绝但版本号已写入」的情况，导致后续升级
+        // 不再建表、所有依赖该表的接口 500（头像/上传/媒体全部失败）。
+        if ($row !== null && (string) $row['value'] === $version && db_table_exists('avatar_files')) {
             $need = false;
         }
     } catch (Exception $e) {
+        $need = true;
+    } catch (Throwable $e) {
         $need = true;
     }
 
