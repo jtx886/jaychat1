@@ -30,17 +30,17 @@ export function setBase(url) {
   ws.connect();
 }
 
-/** 视频扩展名（含服务端统一追加的 .dat 包装） */
-const VIDEO_URL_RE = /\.(mp4|m4v|mov|webm|ogv|avi|mkv|3gp|flv|wmv|mpe?g)(\.dat)?$/i;
-
 /** 媒体地址补全（后端返回 /uploads/xxx）
- *  视频走 /api/media 输出：保证 Content-Type 正确、支持 Range 拖动，
- *  且避免个别共享主机按 .mp4 扩展名拦截或清理文件。 */
+ *  统一走 /api/media 输出：
+ *   - 保证 Content-Type 正确（部分主机按扩展名返回错误类型，导致图片不显示、视频不能播）
+ *   - 支持 Range（视频拖动进度条必需）
+ *   - 部分共享主机（InfinityFree 等）会拦截或清理 /uploads 下的直链，走接口可绕过
+ *  图片与视频一视同仁，避免「视频能看、图片打不开」这类不一致问题。 */
 export function mediaUrl(u) {
   if (!u) return '';
   if (/^(https?:)?\/\//.test(u) || u.startsWith('data:') || u.startsWith('blob:')) return u;
   const clean = u.split('#')[0];
-  if (clean.startsWith('/uploads/') && VIDEO_URL_RE.test(clean)) {
+  if (clean.startsWith('/uploads/')) {
     return getBase() + '/api/media?f=' + encodeURIComponent(clean.slice('/uploads/'.length));
   }
   return getBase() + u;
@@ -112,14 +112,181 @@ export const api = {
   // 后端路由对 POST 做了 PATCH 兼容分发。
   patch: (p, b, o) => http(p, { ...o, method: 'POST', body: b }),
   del: (p, o) => http(p, { ...o, method: 'DELETE' }),
-  upload: (file, kind) => {
+  upload: (file, kind) => uploadFile(file, kind),
+};
+
+/* ============ 文件上传（压缩 + 多协议自动降级） ============
+ * 共享主机常见的三个坑，这里逐一兜住：
+ *   1) 手机原图 3~8MB，超过主机 upload_max_filesize / post_max_size → 先在前端压缩到 1MB 内；
+ *   2) 部分主机/WAF 直接拦截 multipart/form-data 并返回 403 → 自动改用 application/octet-stream；
+ *   3) 视频动辄十几 MB，任何单次请求都超限 → 自动切片上传（每片 768KB）后由服务端合并。
+ * 三者任意一条可用，上传就能成功。
+ */
+const UPLOAD_TIMEOUT = 180000;
+const CHUNK_SIZE = 768 * 1024;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+function randomHex(n) {
+  const bytes = new Uint8Array(n);
+  (globalThis.crypto || window.crypto).getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('decode failed'));
+    };
+    img.src = url;
+  });
+}
+
+/** 图片压缩：长边最大 1920、目标 < 900KB，保证能通过 2MB 的主机限制 */
+async function compressImage(file) {
+  if (!file) return file;
+  const type = (file.type || '').toLowerCase();
+  if (!type.startsWith('image/')) return file;
+  // GIF/WebP/SVG 压缩后会丢动画或透明信息，保持原样
+  if (type === 'image/gif' || type === 'image/webp' || type === 'image/svg+xml') return file;
+  if (file.size <= 900 * 1024) return file;
+  try {
+    const img = await loadImage(file);
+    const maxSide = 1920;
+    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+    const width = Math.max(1, Math.round(img.width * scale));
+    const height = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    if (type === 'image/png') {
+      ctx.drawImage(img, 0, 0, width, height);
+    } else {
+      // JPEG 无透明通道，先铺白底避免出现黑块
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+    }
+    const outType = type === 'image/png' ? 'image/png' : 'image/jpeg';
+    let blob = null;
+    const qualities = outType === 'image/jpeg' ? [0.88, 0.8, 0.72, 0.62, 0.5] : [undefined];
+    for (const q of qualities) {
+      blob = await new Promise((res) => canvas.toBlob(res, outType, q));
+      if (!blob) break;
+      if (outType === 'image/png' || blob.size <= 900 * 1024) break;
+    }
+    if (!blob || blob.size >= file.size) return file;
+    const base = (file.name || 'image').replace(/\.[^.]+$/, '');
+    return new File([blob], base + (outType === 'image/png' ? '.png' : '.jpg'), { type: outType });
+  } catch {
+    return file;
+  }
+}
+
+async function uploadDirect(file, kind, mode) {
+  const t = tokenStore.get();
+  const headers = {};
+  if (t) headers.Authorization = `Bearer ${t}`;
+  let body;
+  if (mode === 'raw') {
+    headers['Content-Type'] = 'application/octet-stream';
+    headers['X-File-Name'] = encodeURIComponent(file.name || 'upload');
+    body = file;
+  } else {
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('kind', kind || (file.type?.startsWith('video') ? 'video' : 'image'));
-    // 图片/视频上传体积大、耗时长，单独放宽超时（3 分钟）
-    return http('/api/upload', { method: 'POST', body: fd, timeout: 180000 });
-  },
-};
+    fd.append('kind', kind);
+    body = fd;
+  }
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT) : null;
+  let res;
+  try {
+    res = await fetch(getBase() + '/api/upload', { method: 'POST', headers, body, signal: ctrl?.signal });
+  } catch (e) {
+    throw new ApiError(e?.name === 'AbortError' ? '上传超时，请重试' : '上传失败：网络不可用', 0);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(data.error || `上传失败(${res.status})`, res.status);
+  return data;
+}
+
+/** 分片上传：绕过主机对单次请求体积的限制（视频必用） */
+async function uploadChunked(file, kind) {
+  const total = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  if (total > 400) throw new ApiError('文件过大，请选择更小的文件', 400);
+  const id = randomHex(16);
+  const t = tokenStore.get();
+  for (let i = 0; i < total; i += 1) {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 60000) : null;
+    let res;
+    try {
+      res = await fetch(getBase() + '/api/upload/chunk', {
+        method: 'POST',
+        headers: {
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+          'Content-Type': 'application/octet-stream',
+          'X-Upload-Id': id,
+          'X-Chunk-Index': String(i),
+          'X-Chunk-Total': String(total),
+          'X-File-Name': encodeURIComponent(file.name || 'upload'),
+          'X-File-Kind': kind,
+        },
+        body: file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE),
+        signal: ctrl?.signal,
+      });
+    } catch (e) {
+      throw new ApiError(e?.name === 'AbortError' ? '上传超时，请重试' : '上传失败：网络不可用', 0);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(data.error || `上传失败(${res.status})`, res.status);
+    if (data.url) return data;
+  }
+  throw new ApiError('上传未完成，请重试', 0);
+}
+
+async function uploadFile(file, kind) {
+  if (!file) throw new ApiError('未选择文件', 400);
+  const k = kind || (file.type?.startsWith('video') ? 'video' : 'image');
+  const prepared = k === 'image' ? await compressImage(file) : file;
+  if (prepared.size > MAX_UPLOAD_BYTES) {
+    throw new ApiError('文件超过 10MB，请选择更小的文件', 400);
+  }
+  // 视频偏大时直接分片，避免先撞一次单请求上限
+  if (k !== 'image' && prepared.size > 3 * 1024 * 1024) {
+    return uploadChunked(prepared, k);
+  }
+  try {
+    return await uploadDirect(prepared, k, 'form');
+  } catch (e) {
+    if (e.status === 401 || e.status === 429) throw e;
+    try {
+      // 主机/WAF 拦截 multipart 时，改发原始二进制
+      return await uploadDirect(prepared, k, 'raw');
+    } catch (e2) {
+      if (e2.status === 401 || e2.status === 429) throw e2;
+      try {
+        // 仍然失败：改用分片（可绕过单请求体积与表单限制）
+        return await uploadChunked(prepared, k);
+      } catch {
+        throw e2;
+      }
+    }
+  }
+}
 
 /* ============ 实时 WebSocket（自动重连 + 事件订阅） ============ */
 class Realtime {
@@ -134,6 +301,8 @@ class Realtime {
     this.cursor = 0;
     this.polling = false; // 轮询循环是否已启动（避免重复 connect 起出多条轮询循环）
     this.pollCapable = null; // null=未探测 | 'yes'=后端支持轮询 | 'no'=后端无轮询（走 WebSocket）
+    this.longPoll = true; // 是否启用长轮询（主机不支持时自动退回固定间隔轮询）
+    this.pollFail = 0;
   }
   on(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -224,8 +393,14 @@ class Realtime {
   }
   async pollOnce() {
     if (this.mode !== 'poll' || !tokenStore.get()) return;
+    let ok = false;
+    const wait = this.longPoll ? 12 : 0;
     try {
-      const d = await http('/api/poll' + (this.cursor ? '?since=' + this.cursor : ''), { timeout: 20000 });
+      const d = await http(
+        '/api/poll?since=' + this.cursor + (wait ? '&wait=' + wait : ''),
+        { timeout: wait ? (wait + 8) * 1000 : 20000 },
+      );
+      ok = true;
       if (typeof d?.cursor === 'number') this.cursor = d.cursor;
       (d?.events || []).forEach((e) => {
         if (!e || !e.type) return;
@@ -233,8 +408,17 @@ class Realtime {
         this.emit('__any', e);
       });
     } catch {}
+    if (ok) {
+      this.pollFail = 0;
+    } else if (this.longPoll) {
+      this.pollFail += 1;
+      // 连续失败说明主机不允许长连接（或超时被中断）→ 退回固定间隔轮询
+      if (this.pollFail >= 2) this.longPoll = false;
+    }
     if (this.mode !== 'poll' || !tokenStore.get()) return;
-    this.timer = setTimeout(() => this.pollOnce(), POLL_MS);
+    // 长轮询成功后立刻开始下一次（服务器会挂起等待新事件），否则退回固定间隔
+    const delay = ok && this.longPoll ? 120 : POLL_MS;
+    this.timer = setTimeout(() => this.pollOnce(), delay);
   }
   scheduleRetry() {
     if (this.timer) return;
@@ -279,6 +463,8 @@ class Realtime {
     this.mode = 'ws';
     this.cursor = 0;
     this.pollCapable = null;
+    this.longPoll = true;
+    this.pollFail = 0;
     this.retry = 0;
     this.queue = [];
     this.status = 'idle';

@@ -85,11 +85,13 @@ function jc_respond($status, $data)
 /* 读取 JSON 请求体（超过 2MB 直接拒绝，避免超大包拖垮共享主机） */
 function jc_read_body()
 {
-    // 多部分表单（文件上传）：文件已由 PHP 解析到 $_FILES，这里不做 2MB 限制，
-    // 否则图片/视频上传会被误判为「请求内容过大」。上传体积由 /api/upload 里的
-    // UPLOAD_MAX_BYTES（默认 10MB）单独校验。
-    $contentType = isset($_SERVER['CONTENT_TYPE']) ? (string) $_SERVER['CONTENT_TYPE'] : '';
-    if (stripos($contentType, 'multipart/form-data') === 0) {
+    // 只有 JSON 请求才需要在这里读 body 并做 2MB 限制。
+    // multipart/form-data（文件由 PHP 解析到 $_FILES）与 application/octet-stream
+    // （原始二进制上传）必须原样交给对应路由处理，否则会被误判为「请求内容过大」，
+    // 或提前读空 php://input 导致二进制上传拿到空文件。
+    $contentType = isset($_SERVER['CONTENT_TYPE']) ? strtolower((string) $_SERVER['CONTENT_TYPE']) : '';
+    $isJson = ($contentType === '' || strpos($contentType, 'application/json') !== false);
+    if (!$isJson) {
         return array();
     }
 

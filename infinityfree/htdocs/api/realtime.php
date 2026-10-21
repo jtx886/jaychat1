@@ -67,7 +67,21 @@ route('GET', '#^/api/poll$#', function ($params, $body) {
     }
     $since = (int) $_GET['since'];
 
+    // 长轮询：wait=N（秒，最多 20）。有事件立即返回，没有则挂起到有新事件或超时，
+    // 实时性接近 WebSocket，同时把轮询请求数从「每 3 秒一次」降到「每次事件一次」。
+    $wait = isset($_GET['wait']) ? (int) $_GET['wait'] : 0;
+    $wait = max(0, min(20, $wait));
+
     $rows = events_since($uid, $since, 200);
+    if ($wait > 0 && empty($rows)) {
+        $deadline = microtime(true) + $wait;
+        while (empty($rows) && microtime(true) < $deadline) {
+            usleep(600000);
+            // 长轮询期间持续刷新 last_poll，避免被判定为离线
+            db_run('UPDATE `users` SET `last_poll` = ? WHERE `id` = ?', array(now_ms(), $uid));
+            $rows = events_since($uid, $since, 200);
+        }
+    }
     $events = array();
     $maxId = $since;
     foreach ($rows as $r) {

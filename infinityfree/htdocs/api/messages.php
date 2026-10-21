@@ -159,47 +159,87 @@ function jc_upload_type($tmp, $clientExt)
     return null;
 }
 
-route('POST', '#^/api/upload$#', function ($params, $body) {
-    $uid = require_auth();
-    // 防止刷上传占满空间/带宽：单用户每分钟最多 20 次
-    jc_rate_limit('upload', 20, 60000, 'user:' . $uid);
+/**
+ * 统一接收上传内容，兼容两种协议：
+ *   1) multipart/form-data —— 标准方式，PHP 已解析到 $_FILES['file']
+ *   2) application/octet-stream —— 原始二进制（配合 X-File-Name 头），
+ *      用于部分共享主机/WAF 直接拦截 multipart 请求（返回 403）的场景。
+ *
+ * 返回：array('tmp','name','size','cleanup') 或 array('error'=>代码,'limit'=>描述)；无内容返回 null。
+ */
+function jc_upload_input()
+{
+    $f = isset($_FILES['file']) ? $_FILES['file'] : null;
+    if (is_array($f) && isset($f['error']) && !is_array($f['error'])) {
+        $err = (int) $f['error'];
+        if ($err !== UPLOAD_ERR_OK) {
+            return array('error' => $err, 'limit' => (string) ini_get('upload_max_filesize'));
+        }
+        $tmp = isset($f['tmp_name']) ? (string) $f['tmp_name'] : '';
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            return array('error' => UPLOAD_ERR_NO_FILE, 'limit' => (string) ini_get('post_max_size'));
+        }
+        return array(
+            'tmp' => $tmp,
+            'name' => isset($f['name']) ? (string) $f['name'] : '',
+            'size' => isset($f['size']) ? (int) $f['size'] : (int) @filesize($tmp),
+            'cleanup' => false,
+        );
+    }
 
-    if (!isset($_FILES['file'])) {
-        return array(400, array('error' => '未收到文件'));
+    $ct = isset($_SERVER['CONTENT_TYPE']) ? strtolower((string) $_SERVER['CONTENT_TYPE']) : '';
+    if (strpos($ct, 'application/octet-stream') !== 0) {
+        return null;
     }
-    $f = $_FILES['file'];
-    $err = isset($f['error']) ? (int) $f['error'] : UPLOAD_ERR_NO_FILE;
-    if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) {
-        return array(400, array('error' => '文件过大，当前部署最多支持 10MB'));
+    $tmp = @tempnam(sys_get_temp_dir(), 'jcu');
+    if (!$tmp) {
+        return array('error' => UPLOAD_ERR_CANT_WRITE, 'limit' => '');
     }
-    if ($err !== UPLOAD_ERR_OK) {
-        return array(400, array('error' => '上传失败'));
+    $src = @fopen('php://input', 'rb');
+    $dst = @fopen($tmp, 'wb');
+    if (!$src || !$dst) {
+        if ($src) { @fclose($src); }
+        if ($dst) { @fclose($dst); }
+        @unlink($tmp);
+        return array('error' => UPLOAD_ERR_CANT_WRITE, 'limit' => '');
     }
-    if (!isset($f['tmp_name']) || $f['tmp_name'] === '') {
-        return array(400, array('error' => '未收到文件'));
+    $size = (int) @stream_copy_to_stream($src, $dst);
+    @fclose($src);
+    @fclose($dst);
+    if ($size <= 0) {
+        @unlink($tmp);
+        return array('error' => UPLOAD_ERR_NO_FILE, 'limit' => (string) ini_get('post_max_size'));
     }
-    if (!is_uploaded_file($f['tmp_name'])) {
-        return array(400, array('error' => '上传失败'));
-    }
+    $name = isset($_SERVER['HTTP_X_FILE_NAME']) ? rawurldecode((string) $_SERVER['HTTP_X_FILE_NAME']) : '';
+    return array('tmp' => $tmp, 'name' => $name, 'size' => $size, 'cleanup' => true);
+}
 
+/**
+ * 把已落地到临时路径的文件校验并保存到 uploads/YYYYMM/。
+ * 返回 array($status, $data)，与路由返回值一致。
+ */
+function jc_store_upload($tmp, $name, $size, $cleanup)
+{
     $maxBytes = (int) jc_config('UPLOAD_MAX_BYTES');
-    $size = (int) $f['size'];
-    if ($size > $maxBytes) {
-        return array(400, array('error' => '文件过大，当前部署最多支持 10MB'));
+    if ($maxBytes > 0 && $size > $maxBytes) {
+        if ($cleanup) {
+            @unlink($tmp);
+        }
+        return array(400, array('error' => '文件过大，当前部署最多支持 ' . round($maxBytes / 1048576, 1) . 'MB'));
     }
 
-    $original = isset($f['name']) ? (string) $f['name'] : '';
-    $clientExt = strtolower((string) pathinfo($original, PATHINFO_EXTENSION));
+    $clientExt = strtolower((string) pathinfo((string) $name, PATHINFO_EXTENSION));
     $clientExt = $clientExt !== '' ? ('.' . substr($clientExt, 0, 10)) : '';
 
     // 以真实文件内容判定类型，扩展名由服务端决定，避免上传 .php/.svg 等危险文件
-    $info = jc_upload_type($f['tmp_name'], $clientExt);
+    $info = jc_upload_type($tmp, $clientExt);
     if (!$info) {
+        if ($cleanup) {
+            @unlink($tmp);
+        }
         return array(400, array('error' => '不支持的文件类型（仅支持图片与视频）'));
     }
     $kind = $info['kind'];
-    $ext = $info['ext'];
-    $mime = $info['mime'];
     $isVideo = $kind === 'video';
 
     $sub = date('Ym');
@@ -207,15 +247,19 @@ route('POST', '#^/api/upload$#', function ($params, $body) {
     if (!is_dir($dir)) {
         @mkdir($dir, 0777, true);
     }
-    $filename = now_ms() . '_' . bin2hex(random_bytes(6)) . $ext;
+    $filename = now_ms() . '_' . bin2hex(random_bytes(6)) . $info['ext'];
     // 视频统一追加 .dat 后缀：部分共享主机（如 InfinityFree）会按扩展名限制/清理视频文件，
     // 改由 /api/media 以正确的 Content-Type 输出，避免直接访问 .mp4 被拦截。
     if ($isVideo) {
         $filename .= '.dat';
     }
     $dest = $dir . '/' . $filename;
-    if (!@move_uploaded_file($f['tmp_name'], $dest)) {
-        return array(400, array('error' => '上传失败'));
+    $moved = $cleanup ? @rename($tmp, $dest) : @move_uploaded_file($tmp, $dest);
+    if ($cleanup && is_file($tmp)) {
+        @unlink($tmp);
+    }
+    if (!$moved) {
+        return array(400, array('error' => '上传失败，请检查 uploads 目录是否可写'));
     }
 
     return array(200, array(
@@ -223,8 +267,133 @@ route('POST', '#^/api/upload$#', function ($params, $body) {
         'thumb' => '',
         'kind' => $kind,
         'size' => $size,
-        'mime' => $mime,
+        'mime' => $info['mime'],
     ));
+}
+
+route('POST', '#^/api/upload$#', function ($params, $body) {
+    $uid = require_auth();
+    // 防止刷上传占满空间/带宽：单用户每分钟最多 20 次
+    jc_rate_limit('upload', 20, 60000, 'user:' . $uid);
+
+    $up = jc_upload_input();
+    if ($up === null) {
+        return array(400, array('error' => '未收到文件'));
+    }
+    if (isset($up['error'])) {
+        $err = (int) $up['error'];
+        if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) {
+            return array(400, array('error' => '文件过大，服务器允许的单文件上限为 ' . $up['limit']));
+        }
+        if ($err === UPLOAD_ERR_NO_FILE) {
+            return array(400, array('error' => '未收到文件，可能是文件超过服务器 post_max_size=' . $up['limit']));
+        }
+        return array(400, array('error' => '上传失败'));
+    }
+
+    return jc_store_upload($up['tmp'], $up['name'], (int) $up['size'], !empty($up['cleanup']));
+});
+
+/**
+ * 分片上传：POST /api/upload/chunk
+ *   X-Upload-Id    会话 id（16~64 位十六进制，客户端随机生成）
+ *   X-Chunk-Index  当前分片序号（从 0 开始）
+ *   X-Chunk-Total  分片总数
+ *   X-File-Name    原始文件名（URL 编码）
+ *   body           该分片的原始二进制（建议 ≤ 1MB）
+ * 用于视频等大文件：单片体积小，永远不会撞主机的单请求上限，
+ * 所有分片到齐后由服务端合并、校验类型并落盘。
+ */
+route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
+    $uid = require_auth();
+    // 分片数量多，单独放宽限流（按用户，每分钟 600 片 ≈ 450MB 上限）
+    jc_rate_limit('upload_chunk', 600, 60000, 'user:' . $uid);
+
+    $id = isset($_SERVER['HTTP_X_UPLOAD_ID']) ? strtolower(trim((string) $_SERVER['HTTP_X_UPLOAD_ID'])) : '';
+    if (!preg_match('/^[a-f0-9]{16,64}$/', $id)) {
+        return array(400, array('error' => '上传会话不合法'));
+    }
+    $index = isset($_SERVER['HTTP_X_CHUNK_INDEX']) ? (int) $_SERVER['HTTP_X_CHUNK_INDEX'] : -1;
+    $total = isset($_SERVER['HTTP_X_CHUNK_TOTAL']) ? (int) $_SERVER['HTTP_X_CHUNK_TOTAL'] : 0;
+    if ($index < 0 || $total <= 0 || $index >= $total || $total > 400) {
+        return array(400, array('error' => '分片参数不合法'));
+    }
+
+    $dir = JC_HTDOCS . '/uploads/_chunks/' . $id;
+    if (!is_dir($dir) && !@mkdir($dir, 0777, true)) {
+        return array(400, array('error' => '上传失败：临时目录不可写'));
+    }
+    // 顺手清理 2 小时前的残留分片（用户中途取消上传会留下），避免占满空间
+    if ($index === 0) {
+        foreach ((array) @glob(JC_HTDOCS . '/uploads/_chunks/*', GLOB_ONLYDIR) as $old) {
+            if ($old === $dir || !is_dir($old)) {
+                continue;
+            }
+            if ((int) @filemtime($old) < time() - 7200) {
+                foreach ((array) @glob($old . '/*') as $f) {
+                    @unlink($f);
+                }
+                @rmdir($old);
+            }
+        }
+    }
+    $part = $dir . '/' . $index . '.part';
+    $src = @fopen('php://input', 'rb');
+    $dst = @fopen($part, 'wb');
+    if (!$src || !$dst) {
+        if ($src) { @fclose($src); }
+        if ($dst) { @fclose($dst); }
+        return array(400, array('error' => '上传失败：写入临时文件失败'));
+    }
+    $bytes = (int) @stream_copy_to_stream($src, $dst);
+    @fclose($src);
+    @fclose($dst);
+    if ($bytes <= 0) {
+        @unlink($part);
+        return array(400, array('error' => '分片内容为空'));
+    }
+
+    // 统计已到达的分片数
+    $have = 0;
+    for ($i = 0; $i < $total; $i++) {
+        if (is_file($dir . '/' . $i . '.part')) {
+            $have++;
+        }
+    }
+    if ($have < $total) {
+        return array(200, array('ok' => true, 'done' => false, 'received' => $have, 'total' => $total));
+    }
+
+    // 全部分片到齐 → 合并
+    $assembled = $dir . '/_assembled.tmp';
+    $out = @fopen($assembled, 'wb');
+    if (!$out) {
+        return array(400, array('error' => '上传失败：无法合并分片'));
+    }
+    $size = 0;
+    for ($i = 0; $i < $total; $i++) {
+        $fp = @fopen($dir . '/' . $i . '.part', 'rb');
+        if (!$fp) {
+            @fclose($out);
+            return array(400, array('error' => '上传失败：分片缺失'));
+        }
+        $size += (int) @stream_copy_to_stream($fp, $out);
+        @fclose($fp);
+    }
+    @fclose($out);
+
+    $name = isset($_SERVER['HTTP_X_FILE_NAME']) ? rawurldecode((string) $_SERVER['HTTP_X_FILE_NAME']) : '';
+    $result = jc_store_upload($assembled, $name, $size, true);
+
+    // 无论成功与否都清理分片目录，避免占用空间
+    for ($i = 0; $i < $total; $i++) {
+        @unlink($dir . '/' . $i . '.part');
+    }
+    @unlink($assembled);
+    @rmdir($dir);
+    @rmdir(dirname($dir));
+
+    return $result;
 });
 
 /* ------------------------------- 媒体输出 -------------------------------

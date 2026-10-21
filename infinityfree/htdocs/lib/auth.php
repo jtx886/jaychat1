@@ -77,7 +77,27 @@ function jc_jwt_secret()
     try {
         db_exec_ignore('INSERT INTO `jc_meta` (`name`, `value`) VALUES (?, ?)', array('jwt_secret', $generated));
     } catch (Exception $e) {
-        // 持久化失败也返回本次生成值，保证当期请求可用
+        // 持久化失败先不处理，下面会复核并兜底
+    }
+
+    // 复核：确认密钥真的落库。若没写进去（数据库只读/表异常），后续请求会拿到
+    // 不同的随机密钥，导致所有用户瞬间掉线——这正是「更新后要重新登录」的隐患。
+    $saved = false;
+    try {
+        $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('jwt_secret'));
+        $saved = ($row && (string) (isset($row['value']) ? $row['value'] : '') === $generated);
+    } catch (Exception $e) {
+    }
+    if (!$saved) {
+        // 兜底：由部署信息推导的确定性密钥，跨请求/跨升级保持一致
+        $generated = hash('sha256', implode('|', array(
+            'jaychat-jwt',
+            (string) jc_config('DB_DRIVER'),
+            (string) jc_config('DB_HOST'),
+            (string) jc_config('DB_NAME'),
+            (string) jc_config('DB_USER'),
+            (string) jc_config('DB_PATH'),
+        )));
     }
     $secret = $generated;
     return $secret;

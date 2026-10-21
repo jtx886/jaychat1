@@ -49,9 +49,11 @@ export default function App() {
       const token = tokenStore.get();
       if (token) {
         try {
-          const { user } = await api.get('/api/auth/me');
+          const { user, token: renewed } = await api.get('/api/auth/me');
           setMe(user);
           tokenStore.setUser(user);
+          // 服务端每次启动都会下发续期 token，保存后登录态可长期保持
+          if (renewed) tokenStore.set(renewed);
         } catch (e) {
           if (e.status === 401) tokenStore.clear();
         }

@@ -193,14 +193,14 @@ route('POST', '#^/api/auth/reset-password$#', function ($params, $body) {
     return array(200, array('ok' => true));
 });
 
-// 当前用户
+// 当前用户（同时下发续期 token：只要用户还在使用，登录态就不会过期）
 route('GET', '#^/api/auth/me$#', function ($params, $body) {
     $uid = require_auth();
     $u = get_user($uid);
     if (!$u) {
         return array(404, array('error' => '用户不存在'));
     }
-    return array(200, array('user' => self_user($u)));
+    return array(200, array('user' => self_user($u), 'token' => sign_token($uid)));
 });
 
 // 修改昵称 / 头像 / 签名（昵称一周最多改 2 次）

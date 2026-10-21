@@ -105,10 +105,12 @@ function jc_config($key = null)
     return array_key_exists($key, $GLOBALS['JC_CONFIG']) ? $GLOBALS['JC_CONFIG'][$key] : null;
 }
 
-/** token 有效期：30 天（毫秒） */
+/** token 有效期：365 天（毫秒）
+ *  登录态长期有效，避免用户隔一段时间就被迫重新登录；
+ *  /api/auth/me 每次启动还会下发续期 token，正常使用可永久保持登录。 */
 function jc_token_ttl()
 {
-    return 1000 * 60 * 60 * 24 * 30;
+    return 1000 * 60 * 60 * 24 * 365;
 }
 
 /** 官方群名称 */
