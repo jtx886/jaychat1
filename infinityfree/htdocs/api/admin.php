@@ -4,7 +4,8 @@
  *
  *   GET    /api/admin/overview        总览：注册/在线/群聊/消息等全站数据
  *   GET    /api/admin/ai              AI 配置读取
- *   PATCH  /api/admin/ai              AI 配置保存（模型/密钥/接口/名称/头像）
+ *   POST   /api/admin/ai              AI 配置保存（模型/密钥/接口/名称/头像）
+ *   PATCH  /api/admin/ai              同上（兼容旧版前端）
  *   GET    /api/admin/users           用户列表（支持关键词搜索）
  *   POST   /api/admin/users/{id}/ban   封禁（days>0 封 N 天，days=0 永久）
  *   POST   /api/admin/users/{id}/unban 解封
@@ -132,7 +133,7 @@ route('GET', '#^/api/admin/ai$#', function ($params, $body) {
     ));
 });
 
-route('PATCH', '#^/api/admin/ai$#', function ($params, $body) {
+$jc_ai_save = function ($params, $body) {
     jc_require_admin();
     $map = array('url' => 'ai_url', 'key' => 'ai_key', 'model' => 'ai_model', 'name' => 'ai_name', 'avatar' => 'ai_avatar');
     foreach ($map as $field => $key) {
@@ -147,12 +148,20 @@ route('PATCH', '#^/api/admin/ai$#', function ($params, $body) {
                 $val = mb_substr($val, 0, 20, 'UTF-8');
             } elseif ($field === 'model') {
                 $val = mb_substr($val, 0, 100, 'UTF-8');
+            } elseif ($field === 'key') {
+                // 部分主机对超长请求有限制，密钥无需超过 500 字符
+                $val = mb_substr($val, 0, 500, 'UTF-8');
+            } elseif ($field === 'avatar') {
+                $val = mb_substr($val, 0, 500, 'UTF-8');
             }
             jc_setting_set($key, $val);
         }
     }
     return array(200, array('ok' => true, 'config' => jc_ai_conf_public_out()));
-});
+};
+// POST 为主：部分共享主机 / WAF 会拦截 PATCH 等非常用方法，导致配置看似保存成功但实际未落库
+route('POST', '#^/api/admin/ai$#', $jc_ai_save);
+route('PATCH', '#^/api/admin/ai$#', $jc_ai_save);
 
 /** AI 配置输出（返回给前端，含明文密钥，仅管理员可见） */
 function jc_ai_conf_public_out()

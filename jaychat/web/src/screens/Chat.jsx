@@ -112,14 +112,33 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   }, []);
 
   /* ---------- 群聊：读取 AI 展示名称/头像（管理员可自定义） ---------- */
+  const aiProfileAt = useRef(0);
+  const aiNameRef = useRef('Jay AI');
+  useEffect(() => {
+    aiNameRef.current = aiName;
+  }, [aiName]);
+  /** 拉取最新 AI 配置：管理员改名/换头像后无需重进会话即可生效 */
+  const refreshAiProfile = async (force = false) => {
+    if (!isGroup) return null;
+    if (!force && Date.now() - aiProfileAt.current < 8000) return null;
+    try {
+      const d = await api.get('/api/ai/profile');
+      aiProfileAt.current = Date.now();
+      const nm = d?.profile?.name;
+      if (nm) {
+        aiNameRef.current = nm;
+        setAiName(nm);
+      }
+      if (d?.profile && 'avatar' in d.profile) setAiAvatar(d.profile.avatar || '');
+      return d?.profile || null;
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  };
   useEffect(() => {
     if (!isGroup) return;
-    api.get('/api/ai/profile')
-      .then((d) => {
-        if (d?.profile?.name) setAiName(d.profile.name);
-        setAiAvatar(d?.profile?.avatar || '');
-      })
-      .catch(() => {});
+    refreshAiProfile(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGroup]);
 
@@ -156,20 +175,38 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   /** 长按头像/右键头像：群聊中自动 @ 对方（已 @ 过则提示，不重复插入） */
+  const mentionFireAt = useRef(0); // 上一次长按 @ 的时间：移动端长按会同时触发定时器与 contextmenu，用它去重
+  const mentionGuardAt = useRef(0); // 长按后短时间内屏蔽头像 click，避免误打开用户资料
   const avatarMentionHandlers = (user, enabled) => {
     if (!enabled) return {};
     const fire = (e) => {
       e?.preventDefault?.();
+      e?.stopPropagation?.();
       const nm = user?.username;
       if (!nm) return;
-      if (mentionExists(textRef.current, nm)) {
+      const now = Date.now();
+      // 长按 480ms 与浏览器自带的长按菜单可能几乎同时触发，只允许一次
+      if (now - mentionFireAt.current < 800) return;
+      mentionFireAt.current = now;
+      mentionGuardAt.current = now;
+      const cur = textRef.current;
+      if (mentionExists(cur, nm)) {
         toast(`你已@${nm}`);
         return;
       }
-      setText((t) => replaceTrailingMention(t, nm));
+      const next = replaceTrailingMention(cur, nm);
+      // 立即更新镜像，防止两个事件在同一帧内都读到旧文本而插入两次
+      textRef.current = next;
+      setText(next);
     };
     return {
       onContextMenu: fire,
+      onClickCapture: (e) => {
+        if (Date.now() - mentionGuardAt.current < 700) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
       onTouchStart: (e) => {
         e.currentTarget._atTimer = setTimeout(() => fire(), 480);
       },
@@ -182,6 +219,11 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const mentionMatch = isGroup ? /(^|\s)@([^\s@]*)$/.exec(text) : null;
   const mentionOpen = !!mentionMatch;
   const mentionQuery = mentionMatch ? mentionMatch[2] : '';
+  // 打开 @ 面板时顺带刷新 AI 名称/头像，避免后台改完后这里仍显示旧名字
+  useEffect(() => {
+    if (mentionOpen) refreshAiProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentionOpen]);
   useEffect(() => {
     setMq(mentionOpen ? mentionQuery : '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,16 +347,16 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     setAiPending(null);
   };
 
-  const startAiPending = (askerName) => {
+  const startAiPending = (askerName, displayName = aiName, displayAvatar = aiAvatar) => {
     if (aiPendingTimer.current) clearTimeout(aiPendingTimer.current);
     setAiPending({
       id: `local-ai-${Date.now()}`,
       conv_type: convType,
       conv_id: String(convId),
       sender_id: 0,
-      sender: { id: 0, username: aiName, avatar: aiAvatar },
+      sender: { id: 0, username: displayName, avatar: displayAvatar },
       msg_type: 'text',
-      content: `@${askerName} ${aiName} 正在思考中…`,
+      content: `@${askerName} ${displayName} 正在思考中…`,
       extra: { ai: true, pending: true },
       created_at: Date.now(),
     });
@@ -430,15 +472,19 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       setText('');
       setReplyMsg(null);
       setTimeout(scrollToBottom, 40);
-      // 群里 @ Jay AI 提问：立即本地显示「正在思考」，再异步触发机器人回复
-      if (isGroup && msgType === 'text' && mentionsAi(body, aiName)) {
-        startAiPending(me.username);
-        api
-          .post('/api/ai/ask', { groupId: Number(convId), question: body }, { timeout: 120000 })
-          .catch(() => {
-            clearAiPending();
-            toast('AI 暂时没有回应，请稍后再试', 'error');
-          });
+      // 群里 @ Jay AI 提问：先拉一次最新配置（管理员可能刚改过 AI 名称），再本地显示「正在思考」
+      if (isGroup && msgType === 'text') {
+        const prof = await refreshAiProfile();
+        const curName = prof?.name || aiNameRef.current;
+        if (mentionsAi(body, curName)) {
+          startAiPending(me.username, curName, prof?.avatar ?? aiAvatar);
+          api
+            .post('/api/ai/ask', { groupId: Number(convId), question: body }, { timeout: 120000 })
+            .catch(() => {
+              clearAiPending();
+              toast('AI 暂时没有回应，请稍后再试', 'error');
+            });
+        }
       }
     } catch (e) {
       toast(e.message, 'error');

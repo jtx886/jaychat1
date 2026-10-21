@@ -210,7 +210,8 @@ function AiConfig() {
     if (!cfg) return;
     setSaving(true);
     try {
-      const d = await api.patch('/api/admin/ai', {
+      // 用 POST 保存：部分共享主机 / WAF 会拦截 PATCH 等非常用方法，导致配置保存后不生效
+      const d = await api.post('/api/admin/ai', {
         url: cfg.url || '',
         key: cfg.key || '',
         model: cfg.model || '',
