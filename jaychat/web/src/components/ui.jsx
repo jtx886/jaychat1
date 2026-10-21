@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { mediaUrl } from '../api.js';
+import { mediaUrl, directMediaUrl } from '../api.js';
+import { avatarSrc } from '../lib/avatar.js';
 import { Icon } from './icons.jsx';
 
 /* ============================ Logo ============================ */
@@ -47,7 +48,7 @@ export function OfficialBadge({ size = 17, inline }) {
 
 export function Avatar({ user, name, src, size = 48, online, showOnline = true, radius, style, children, onClick }) {
   const label = name || user?.username || '';
-  const img = src ?? user?.avatar ?? '';
+  const img = avatarSrc(src ?? user?.avatar ?? '');
   const official = user?.is_official;
   const isOn = online ?? user?.online;
   const r = radius ?? Math.round(size * 0.32);
@@ -200,15 +201,69 @@ export function Loading({ text = '加载中…' }) {
   );
 }
 
+/* ============================ 图片（自动降级 + 失败提示） ============================ */
+/** 统一图片组件：
+ *  - 默认走 /api/media（正确的 Content-Type，绕过主机对扩展名的拦截）
+ *  - 加载失败时自动改用 /uploads 直链再试一次
+ *  - 仍失败则显示「图片加载失败」，不再留一块空白
+ */
+export function SmartImage({ src, alt = '', className, style, ...rest }) {
+  const primary = mediaUrl(src);
+  const fallback = directMediaUrl(src);
+  const [cur, setCur] = useState(primary);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setCur(primary);
+    setFailed(false);
+  }, [primary, fallback]);
+  if (!src) return null;
+  if (failed) {
+    return (
+      <div className={'video-fail' + (className ? ' ' + className : '')} style={style}>
+        <Icon name="image" size={22} strokeWidth={1.8} />
+        <span>图片加载失败</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={cur}
+      alt={alt}
+      loading="lazy"
+      className={className}
+      style={style}
+      onError={() => {
+        if (fallback && cur !== fallback) setCur(fallback);
+        else setFailed(true);
+      }}
+      {...rest}
+    />
+  );
+}
+
 /* ============================ 视频播放器 ============================ */
 /** 视频播放：加载失败时给出可重试的提示，避免只显示一块黑屏 */
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
   const [err, setErr] = useState(false);
   const [nonce, setNonce] = useState(0);
+  const [useDirect, setUseDirect] = useState(false);
   useEffect(() => {
     setErr(false);
     setNonce(0);
+    setUseDirect(false);
   }, [src]);
+  // /api/media 偶发不可用时，自动改用 /uploads 直链重试一次
+  const direct = (() => {
+    const s = String(src || '');
+    const marker = '/api/media?f=';
+    const i = s.indexOf(marker);
+    if (i < 0) return '';
+    try {
+      return s.slice(0, i) + '/uploads/' + decodeURIComponent(s.slice(i + marker.length));
+    } catch {
+      return '';
+    }
+  })();
   if (err) {
     return (
       <div
@@ -230,7 +285,8 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       </div>
     );
   }
-  const url = nonce ? src + (src.includes('?') ? '&' : '?') + 'r=' + nonce : src;
+  const base = useDirect && direct ? direct : src;
+  const url = nonce ? base + (base.includes('?') ? '&' : '?') + 'r=' + nonce : base;
   return (
     <video
       src={url}
@@ -241,7 +297,14 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       playsInline
       preload="metadata"
       onClick={onClick}
-      onError={() => setErr(true)}
+      onError={() => {
+        if (!useDirect && direct) {
+          setUseDirect(true);
+          setNonce(Date.now());
+        } else {
+          setErr(true);
+        }
+      }}
     />
   );
 }
@@ -274,7 +337,7 @@ export function MediaViewer({ item, onClose, onFirstView, oneTimeView, onBurn, b
         isVideo ? (
           <VideoPlayer src={url} autoPlay onClick={(e) => e.stopPropagation()} />
         ) : (
-          <img src={url} alt="" onClick={(e) => e.stopPropagation()} />
+          <SmartImage src={item.url || item.media_url} alt="" onClick={(e) => e.stopPropagation()} />
         )
       ) : (
         <div className="one-time-overlay" onClick={(e) => e.stopPropagation()}>

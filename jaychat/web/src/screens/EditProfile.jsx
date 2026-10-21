@@ -32,14 +32,19 @@ export default function EditProfileScreen({ focus = 'avatar' }) {
     }
   };
 
-  const saveAvatar = async (url) => {
+  const saveAvatar = async (value) => {
+    const prev = avatar;
+    // 先本地生效，头像区域立即刷新，不必等接口返回或退回首页
+    setAvatar(value);
+    setAvatarSheet(false);
     setBusy(true);
     try {
-      const d = await api.patch('/api/auth/me', { avatar: url });
+      const d = await api.patch('/api/auth/me', { avatar: value });
       setMe(d.user);
-      setAvatarSheet(false);
+      setAvatar(d.user?.avatar ?? value);
       toast('头像已更新');
     } catch (e) {
+      setAvatar(prev);
       toast(e.message, 'error');
     } finally {
       setBusy(false);
@@ -90,9 +95,9 @@ export default function EditProfileScreen({ focus = 'avatar' }) {
             <div className="avatar-pick">
               {PRESET_AVATARS.map((p) => (
                 <div
-                  key={p.id}
-                  className={'opt' + (avatar === p.url ? ' sel' : '')}
-                  onClick={() => saveAvatar(p.url)}
+                  key={p.index}
+                  className={'opt' + (presetIndex(avatar) === p.index ? ' sel' : '')}
+                  onClick={() => saveAvatar(p.code)}
                   style={{ backgroundImage: `url("${p.url}")`, backgroundSize: 'cover' }}
                 />
               ))}
@@ -130,9 +135,9 @@ export default function EditProfileScreen({ focus = 'avatar' }) {
         <div className="avatar-pick" style={{ justifyContent: 'center' }}>
           {PRESET_AVATARS.map((p) => (
             <div
-              key={p.emoji}
-              className={'opt' + (presetIndex(avatar) === PRESET_AVATARS.indexOf(p) ? ' sel' : '')}
-              onClick={() => saveAvatar(p.url)}
+              key={p.index}
+              className={'opt' + (presetIndex(avatar) === p.index ? ' sel' : '')}
+              onClick={() => saveAvatar(p.code)}
               style={{ backgroundImage: `url("${p.url}")`, backgroundSize: 'cover' }}
             />
           ))}

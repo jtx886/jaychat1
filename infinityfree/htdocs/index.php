@@ -42,7 +42,10 @@ if ($origin !== '' && $origin !== 'null') {
     }
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+// 自定义上传头（X-File-Name / X-Upload-Id / 分片头）必须在这里显式放行。
+// 否则 Capacitor / 跨域页面会因预检失败而直接抛出「网络不可用」，上传永远失败。
+header('Access-Control-Allow-Headers: Content-Type, Authorization, Range, X-Requested-With, X-File-Name, X-File-Kind, X-Upload-Id, X-Chunk-Index, X-Chunk-Total');
+header('Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges');
 header('Access-Control-Max-Age: 86400');
 
 $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper($_SERVER['REQUEST_METHOD']) : 'GET';

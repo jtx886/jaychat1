@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api, ws, mediaUrl } from '../api.js';
 import { useApp } from '../App.jsx';
-import { Avatar, ActionSheet, Empty, Loading, TopBar, toast, Sheet, MediaViewer, MediaPicker, CameraPicker, Spinner } from '../components/ui.jsx';
+import { Avatar, ActionSheet, Empty, Loading, TopBar, toast, Sheet, MediaViewer, MediaPicker, CameraPicker, Spinner, SmartImage } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import EmojiPanel from '../components/EmojiPanel.jsx';
 import { fullTime } from '../lib/time.js';
@@ -189,7 +189,7 @@ export default function MomentDetailScreen({ momentId }) {
                         {isVideo ? (
                           <video src={mediaUrl(c.media_url)} muted playsInline preload="metadata" />
                         ) : (
-                          <img src={mediaUrl(c.media_thumb || c.media_url)} alt="评论图片" loading="lazy" />
+                          <SmartImage src={c.media_thumb || c.media_url} alt="评论图片" />
                         )}
                         {isVideo ? (
                           <span className="comment-media-tag"><Icon name="play" size={11} filled /> 视频</span>

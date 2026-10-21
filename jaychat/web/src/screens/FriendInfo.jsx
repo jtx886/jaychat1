@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
-import { Avatar, Empty, Loading, TopBar, Sheet, ActionSheet, Switch, toast } from '../components/ui.jsx';
+import { Avatar, Empty, Loading, TopBar, Sheet, ActionSheet, Switch, SmartImage, toast } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import { fullTime, fromNow } from '../lib/time.js';
-import { mediaUrl } from '../api.js';
 
 export default function FriendInfoScreen({ userId }) {
   const { back, push, refreshConversations, me, conversations } = useApp();
@@ -165,7 +164,7 @@ export default function FriendInfoScreen({ userId }) {
                   m.media[0].type === 'video' ? (
                     <div className="avatar" style={{ width: 46, height: 46, borderRadius: 12, background: '#0b1226' }}><Icon name="videoCam" size={22} /></div>
                   ) : (
-                    <img src={mediaUrl(m.media[0].url)} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover' }} />
+                    <SmartImage src={m.media[0].url} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover' }} />
                   )
                 ) : (
                   <Avatar name="动" size={46} style={{ background: 'linear-gradient(135deg,#7a5cff,#5236e8)' }} />

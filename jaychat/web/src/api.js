@@ -46,6 +46,16 @@ export function mediaUrl(u) {
   return getBase() + u;
 }
 
+/**
+ * 直链地址（备用）：/uploads/... 直接访问。
+ * 正常情况下走 /api/media；万一接口不可用，前端会自动降级到这里。
+ */
+export function directMediaUrl(u) {
+  if (!u) return '';
+  if (/^(https?:)?\/\//.test(u) || u.startsWith('data:') || u.startsWith('blob:')) return u;
+  return getBase() + u;
+}
+
 export const tokenStore = {
   get: () => localStorage.getItem(LS_TOKEN) || '',
   set: (t) => (t ? localStorage.setItem(LS_TOKEN, t) : localStorage.removeItem(LS_TOKEN)),
@@ -119,12 +129,17 @@ export const api = {
  * 共享主机常见的三个坑，这里逐一兜住：
  *   1) 手机原图 3~8MB，超过主机 upload_max_filesize / post_max_size → 先在前端压缩到 1MB 内；
  *   2) 部分主机/WAF 直接拦截 multipart/form-data 并返回 403 → 自动改用 application/octet-stream；
- *   3) 视频动辄十几 MB，任何单次请求都超限 → 自动切片上传（每片 768KB）后由服务端合并。
+ *   3) 视频动辄十几 MB，任何单次请求都超限 → 自动切片上传（每片 512KB）后由服务端合并。
  * 三者任意一条可用，上传就能成功。
  */
 const UPLOAD_TIMEOUT = 180000;
-const CHUNK_SIZE = 768 * 1024;
+const CHUNK_SIZE = 512 * 1024;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+// 单次请求安全的体积上限：免费主机 upload_max_filesize 通常只有 2MB，
+// 超过这个值直接走分片，避免先发一次注定失败的大请求。
+const SINGLE_MAX = 1200 * 1024;
+const IMAGE_TARGET = 700 * 1024;
+const IMAGE_MAX_SIDE = 1920;
 
 function randomHex(n) {
   const bytes = new Uint8Array(n);
@@ -148,44 +163,67 @@ function loadImage(file) {
   });
 }
 
-/** 图片压缩：长边最大 1920、目标 < 900KB，保证能通过 2MB 的主机限制 */
+function imageTypeOf(file) {
+  const t = (file?.type || '').toLowerCase();
+  if (t.startsWith('image/')) return t;
+  const name = (file?.name || '').toLowerCase();
+  if (/\.jpe?g$/.test(name)) return 'image/jpeg';
+  if (/\.png$/.test(name)) return 'image/png';
+  if (/\.gif$/.test(name)) return 'image/gif';
+  if (/\.webp$/.test(name)) return 'image/webp';
+  if (/\.bmp$/.test(name)) return 'image/bmp';
+  return '';
+}
+
+/**
+ * 图片压缩：逐级缩小长边并把质量压到目标体积以内。
+ * 免费主机单文件上限可能只有 2MB，压缩到 700KB 内后任何协议都能传上去。
+ * 解码失败（如 HEIC）时原样返回，交给分片上传 / 明确的错误提示处理。
+ */
 async function compressImage(file) {
   if (!file) return file;
-  const type = (file.type || '').toLowerCase();
-  if (!type.startsWith('image/')) return file;
-  // GIF/WebP/SVG 压缩后会丢动画或透明信息，保持原样
+  const type = imageTypeOf(file);
+  if (!type) return file;
+  // GIF/WebP 可能带动画，SVG 是矢量，压缩会丢失信息，直接原样上传
   if (type === 'image/gif' || type === 'image/webp' || type === 'image/svg+xml') return file;
-  if (file.size <= 900 * 1024) return file;
+  if (file.size <= IMAGE_TARGET) return file;
+  let img;
   try {
-    const img = await loadImage(file);
-    const maxSide = 1920;
-    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-    const width = Math.max(1, Math.round(img.width * scale));
-    const height = Math.max(1, Math.round(img.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
-    if (type === 'image/png') {
-      ctx.drawImage(img, 0, 0, width, height);
-    } else {
-      // JPEG 无透明通道，先铺白底避免出现黑块
+    img = await loadImage(file);
+  } catch {
+    return file;
+  }
+  const render = (side, quality) => new Promise((resolve) => {
+    try {
+      const scale = Math.min(1, side / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(null);
+      // JPEG 无透明通道，先铺白底避免透明区域变黑
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
+    } catch {
+      resolve(null);
     }
-    const outType = type === 'image/png' ? 'image/png' : 'image/jpeg';
-    let blob = null;
-    const qualities = outType === 'image/jpeg' ? [0.88, 0.8, 0.72, 0.62, 0.5] : [undefined];
-    for (const q of qualities) {
-      blob = await new Promise((res) => canvas.toBlob(res, outType, q));
-      if (!blob) break;
-      if (outType === 'image/png' || blob.size <= 900 * 1024) break;
+  });
+  try {
+    let best = null;
+    const sides = [IMAGE_MAX_SIDE, 1440, 1080, 800, 640];
+    for (const side of sides) {
+      const blob = await render(side, 0.82);
+      if (!blob) continue;
+      if (!best || blob.size < best.size) best = blob;
+      if (blob.size <= IMAGE_TARGET) break;
     }
-    if (!blob || blob.size >= file.size) return file;
-    const base = (file.name || 'image').replace(/\.[^.]+$/, '');
-    return new File([blob], base + (outType === 'image/png' ? '.png' : '.jpg'), { type: outType });
+    if (!best || best.size >= file.size) return file;
+    const base = (file.name || 'image').replace(/\.[^.]+$/, '') || 'image';
+    return new File([best], base + '.jpg', { type: 'image/jpeg' });
   } catch {
     return file;
   }
@@ -199,6 +237,7 @@ async function uploadDirect(file, kind, mode) {
   if (mode === 'raw') {
     headers['Content-Type'] = 'application/octet-stream';
     headers['X-File-Name'] = encodeURIComponent(file.name || 'upload');
+    headers['X-File-Kind'] = kind;
     body = file;
   } else {
     const fd = new FormData();
@@ -212,12 +251,13 @@ async function uploadDirect(file, kind, mode) {
   try {
     res = await fetch(getBase() + '/api/upload', { method: 'POST', headers, body, signal: ctrl?.signal });
   } catch (e) {
-    throw new ApiError(e?.name === 'AbortError' ? '上传超时，请重试' : '上传失败：网络不可用', 0);
+    throw new ApiError(e?.name === 'AbortError' ? '上传超时，请重试' : '上传失败：网络连接被中断，请换用 WiFi/移动网络后重试', 0);
   } finally {
     if (timer) clearTimeout(timer);
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error || `上传失败(${res.status})`, res.status);
+  if (!data || !data.url) throw new ApiError('上传失败：服务器未返回文件地址', 0);
   return data;
 }
 
@@ -227,33 +267,50 @@ async function uploadChunked(file, kind) {
   if (total > 400) throw new ApiError('文件过大，请选择更小的文件', 400);
   const id = randomHex(16);
   const t = tokenStore.get();
-  for (let i = 0; i < total; i += 1) {
+  const headers = {
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
+    'Content-Type': 'application/octet-stream',
+    'X-Upload-Id': id,
+    'X-Chunk-Total': String(total),
+    'X-File-Name': encodeURIComponent(file.name || 'upload'),
+    'X-File-Kind': kind,
+  };
+
+  const postChunk = async (index) => {
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), 60000) : null;
     let res;
     try {
       res = await fetch(getBase() + '/api/upload/chunk', {
         method: 'POST',
-        headers: {
-          ...(t ? { Authorization: `Bearer ${t}` } : {}),
-          'Content-Type': 'application/octet-stream',
-          'X-Upload-Id': id,
-          'X-Chunk-Index': String(i),
-          'X-Chunk-Total': String(total),
-          'X-File-Name': encodeURIComponent(file.name || 'upload'),
-          'X-File-Kind': kind,
-        },
-        body: file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE),
+        headers: { ...headers, 'X-Chunk-Index': String(index) },
+        body: file.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE),
         signal: ctrl?.signal,
       });
     } catch (e) {
-      throw new ApiError(e?.name === 'AbortError' ? '上传超时，请重试' : '上传失败：网络不可用', 0);
+      throw new ApiError(e?.name === 'AbortError' ? '分片上传超时，请重试' : '上传失败：网络连接被中断，请换用 WiFi/移动网络后重试', 0);
     } finally {
       if (timer) clearTimeout(timer);
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(data.error || `上传失败(${res.status})`, res.status);
-    if (data.url) return data;
+    return data;
+  };
+
+  for (let i = 0; i < total; i += 1) {
+    let data;
+    try {
+      data = await postChunk(i);
+    } catch (e) {
+      // 网络抖动导致单片失败时自动重试一次（鉴权/参数类错误不重试）
+      if (!e.status) {
+        await new Promise((r) => setTimeout(r, 600));
+        data = await postChunk(i);
+      } else {
+        throw e;
+      }
+    }
+    if (data && data.url) return data;
   }
   throw new ApiError('上传未完成，请重试', 0);
 }
@@ -261,12 +318,15 @@ async function uploadChunked(file, kind) {
 async function uploadFile(file, kind) {
   if (!file) throw new ApiError('未选择文件', 400);
   const k = kind || (file.type?.startsWith('video') ? 'video' : 'image');
+  if (k === 'image' && (/\.(heic|heif)$/i.test(file.name || '') || /^image\/hei[cf]$/i.test(file.type || ''))) {
+    throw new ApiError('该图片为 HEIC/HEIF 格式，请先在相册中转换为 JPG 再上传', 400);
+  }
   const prepared = k === 'image' ? await compressImage(file) : file;
   if (prepared.size > MAX_UPLOAD_BYTES) {
-    throw new ApiError('文件超过 10MB，请选择更小的文件', 400);
+    throw new ApiError('文件超过 10MB，请选择更小的文件（视频请先裁剪）', 400);
   }
-  // 视频偏大时直接分片，避免先撞一次单请求上限
-  if (k !== 'image' && prepared.size > 3 * 1024 * 1024) {
+  // 超过单请求安全上限：直接分片，永远不撞主机的 2MB / post_max_size 限制
+  if (prepared.size > SINGLE_MAX) {
     return uploadChunked(prepared, k);
   }
   try {
@@ -281,7 +341,10 @@ async function uploadFile(file, kind) {
       try {
         // 仍然失败：改用分片（可绕过单请求体积与表单限制）
         return await uploadChunked(prepared, k);
-      } catch {
+      } catch (e3) {
+        if (e2.status === 0 || e3.status === 0) {
+          throw new ApiError('上传失败：网络连接被中断，请换用 WiFi/移动网络后重试', 0);
+        }
         throw e2;
       }
     }

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { api, mediaUrl } from '../api.js';
-import { Avatar, ActionSheet, toast } from '../components/ui.jsx';
+import { api } from '../api.js';
+import { Avatar, ActionSheet, SmartImage, VideoPlayer, toast } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import { fullTime } from '../lib/time.js';
 import { useApp } from '../App.jsx';
@@ -52,15 +52,12 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           {media.slice(0, 9).map((item, i) => (
             <div key={i} onClick={() => onOpen?.('detail')} style={{ position: 'relative', cursor: 'pointer' }}>
               {item.type === 'video' ? (
-                <video
-                  src={mediaUrl(item.url)}
-                  controls
-                  playsInline
-                  preload="metadata"
+                <VideoPlayer
+                  src={item.url}
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <img src={mediaUrl(item.url)} alt="" loading="lazy" />
+                <SmartImage src={item.url} alt="" />
               )}
               {item.type === 'video' ? (
                 <span style={{ position: 'absolute', left: 6, top: 6, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 8, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fff' }}>

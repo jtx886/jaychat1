@@ -34,13 +34,43 @@ export function makeVectorAvatar(glyph, idx = 0) {
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
-export const PRESET_AVATARS = PRESET_DEFS.map(([glyph, grad]) => ({
+export const PRESET_AVATARS = PRESET_DEFS.map(([glyph, grad], index) => ({
   id: glyph,
   glyph,
+  index,
+  // 存入数据库的是短标记（如 preset:4），不再存上千米的 data URI，
+  // 彻底避免字段截断 / 传输体积过大导致的头像显示异常。
+  code: 'preset:' + index,
   url: makeVectorAvatar(glyph, grad),
 }));
 
-/** 根据头像 URL 返回预设索引（用于高亮） */
-export function presetIndex(url) {
-  return PRESET_AVATARS.findIndex((p) => p.url === url);
+/** 把数据库里的头像值解析为可直接用于 <img src> 的地址 */
+export function avatarSrc(value) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  if (v.indexOf('preset:') === 0) {
+    const i = parseInt(v.slice(7), 10);
+    const p = PRESET_AVATARS[i];
+    return p ? p.url : '';
+  }
+  // 旧版本曾把完整 data URI 存进数据库，字段长度不足时会留下被截断的值。
+  // 截断后的 data URI 无法解码，浏览器会显示破图（用户看到的就是「一串乱码」），
+  // 这里直接回退为首字母头像。
+  if (v.indexOf('data:image/svg+xml') === 0 && v.indexOf('%3C/svg%3E') < 0 && v.indexOf('</svg>') < 0) {
+    return '';
+  }
+  if (v.indexOf('data:') === 0 && v.length < 64) {
+    return '';
+  }
+  return v;
+}
+
+/** 根据头像值返回预设索引（用于高亮） */
+export function presetIndex(value) {
+  const v = String(value || '');
+  if (v.indexOf('preset:') === 0) {
+    const i = parseInt(v.slice(7), 10);
+    return Number.isFinite(i) ? i : -1;
+  }
+  return PRESET_AVATARS.findIndex((p) => p.url === v);
 }

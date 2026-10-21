@@ -306,7 +306,7 @@ export default function GroupInfoScreen({ groupId }) {
       <Sheet open={sheet === 'editAvatar'} onClose={() => setSheet(null)} title="更换群头像">
         <div className="avatar-pick" style={{ justifyContent: 'center' }}>
           {PRESET_AVATARS.map((p) => (
-            <Avatar key={p.id} src={p.url} name={group.name} size={48} radius={14} onClick={() => { patchGroup({ avatar: p.url }); setSheet(null); }} style={{ cursor: 'pointer' }} />
+            <Avatar key={p.index} src={p.code} name={group.name} size={48} radius={14} onClick={() => { patchGroup({ avatar: p.code }); setSheet(null); }} style={{ cursor: 'pointer' }} />
           ))}
         </div>
         <MediaPicker

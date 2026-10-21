@@ -228,9 +228,13 @@ route('PATCH', '#^/api/auth/me$#', function ($params, $body) {
         db_run('UPDATE `users` SET `username` = ?, `name_week` = ?, `name_count` = ? WHERE `id` = ?', array($uname, $wk, $count + 1, $uid));
     }
     if ($avatar !== null) {
-        db_run('UPDATE `users` SET `avatar` = ? WHERE `id` = ?', array((string) $avatar, $uid));
+        $avatarValue = jc_normalize_avatar($avatar);
+        if ($avatarValue === null) {
+            return array(400, array('error' => '头像格式不合法'));
+        }
+        db_run('UPDATE `users` SET `avatar` = ? WHERE `id` = ?', array($avatarValue, $uid));
         // 备份上传头像文件：升级覆盖 uploads 后可自动恢复，无需重新设置
-        jc_avatar_backup((string) $avatar);
+        jc_file_backup($avatarValue);
     }
     if ($bio !== null) {
         db_run('UPDATE `users` SET `bio` = ? WHERE `id` = ?', array((string) $bio, $uid));

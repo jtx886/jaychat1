@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ws, mediaUrl, getBase } from '../api.js';
 import { useApp } from '../App.jsx';
 import {
-  Avatar, TopBar, Sheet, ActionSheet, toast, Spinner, MediaViewer, MediaPicker, CameraPicker, Empty, VideoPlayer,
+  Avatar, TopBar, Sheet, ActionSheet, toast, Spinner, MediaViewer, MediaPicker, CameraPicker, Empty, VideoPlayer, SmartImage,
 } from '../components/ui.jsx';
 import EmojiPanel, { StickerView } from '../components/EmojiPanel.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
@@ -802,7 +802,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                 ) : m.msg_type === 'video' ? (
                   <VideoPlayer src={mediaUrl(m.media_url)} />
                 ) : (
-                  <img src={mediaUrl(m.media_url)} alt="" loading="lazy" />
+                  <SmartImage src={m.media_url} alt="" />
                 )}
               </div>
             ) : m.msg_type === 'sticker' && m.media_url ? (

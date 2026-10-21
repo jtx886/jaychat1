@@ -262,8 +262,13 @@ function jc_store_upload($tmp, $name, $size, $cleanup)
         return array(400, array('error' => '上传失败，请检查 uploads 目录是否可写'));
     }
 
+    $rel = '/uploads/' . $sub . '/' . $filename;
+    // 上传完成后立刻在数据库留存一份（图片 / 视频都备份）：
+    // 即使之后部署包覆盖 uploads 目录或主机清理文件，/api/media 也能自动恢复。
+    jc_file_backup($rel);
+
     return array(200, array(
-        'url' => '/uploads/' . $sub . '/' . $filename,
+        'url' => $rel,
         'thumb' => '',
         'kind' => $kind,
         'size' => $size,
@@ -273,8 +278,9 @@ function jc_store_upload($tmp, $name, $size, $cleanup)
 
 route('POST', '#^/api/upload$#', function ($params, $body) {
     $uid = require_auth();
-    // 防止刷上传占满空间/带宽：单用户每分钟最多 20 次
-    jc_rate_limit('upload', 20, 60000, 'user:' . $uid);
+    // 防止刷上传占满空间/带宽：单用户每分钟最多 60 次
+    // （一次上传可能经历 form → raw → 分片自动降级，次数要留足余量）
+    jc_rate_limit('upload', 60, 60000, 'user:' . $uid);
 
     $up = jc_upload_input();
     if ($up === null) {
@@ -409,7 +415,18 @@ route('GET', '#^/api/media$#', function ($params, $body) {
     }
     $root = realpath(JC_HTDOCS . '/uploads');
     $full = realpath(JC_HTDOCS . '/uploads/' . $rel);
-    if (!$root || !$full || strpos($full, $root . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) {
+    $valid = $root && $full && strpos($full, $root . DIRECTORY_SEPARATOR) === 0 && is_file($full);
+    if (!$valid) {
+        // 文件可能被部署包覆盖或主机清理：尝试从数据库备份写回磁盘后继续正常输出
+        if (jc_file_restore_to_disk('/uploads/' . $rel)) {
+            $full = realpath(JC_HTDOCS . '/uploads/' . $rel);
+            $valid = $full && $root && strpos($full, $root . DIRECTORY_SEPARATOR) === 0 && is_file($full);
+        }
+    }
+    if (!$valid) {
+        // 404 必须禁止缓存，否则浏览器会把「暂时缺失」永久记成失败，
+        // 即使之后文件恢复也仍然显示加载失败。
+        header('Cache-Control: no-store, no-cache, must-revalidate');
         return array(404, array('error' => '文件不存在或已被服务器清理'));
     }
 
@@ -419,6 +436,7 @@ route('GET', '#^/api/media$#', function ($params, $body) {
     header('Accept-Ranges: bytes');
     header('Cache-Control: public, max-age=604800');
     header('Access-Control-Allow-Origin: *');
+    header('X-Content-Type-Options: nosniff');
 
     $start = 0;
     $end = $size > 0 ? $size - 1 : 0;
@@ -441,6 +459,11 @@ route('GET', '#^/api/media$#', function ($params, $body) {
         header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
     }
     header('Content-Length: ' . ($size === 0 ? 0 : $end - $start + 1));
+    @set_time_limit(0);
+    // 关闭输出缓冲，边读边发：大视频不必一次性读进内存，也不会被主机缓冲截断
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
 
     $fp = @fopen($full, 'rb');
     if (!$fp) {

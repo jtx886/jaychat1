@@ -337,16 +337,49 @@ function build_message($row, $extra = array())
     return $out;
 }
 
-/* --------------------------- 头像文件备份 / 自愈 --------------------------- */
+/* --------------------------- 上传文件备份 / 自愈 --------------------------- */
+
+/** 依据磁盘文件推断 MIME（备份与恢复共用，覆盖图片与视频） */
+function jc_file_mime($file, $fallback = 'application/octet-stream')
+{
+    $name = strtolower((string) $file);
+    if (substr($name, -4) === '.dat') {
+        $name = substr($name, 0, -4);
+    }
+    if (function_exists('finfo_open')) {
+        $fi = @finfo_open(FILEINFO_MIME_TYPE);
+        if ($fi) {
+            $m = (string) @finfo_file($fi, $file);
+            @finfo_close($fi);
+            // 识别失败时继续用扩展名兜底，避免把正常图片/视频存成 octet-stream
+            if ($m !== '' && $m !== 'application/octet-stream' && $m !== 'inode/x-empty') {
+                return $m;
+            }
+        }
+    }
+    $ext = (string) pathinfo($name, PATHINFO_EXTENSION);
+    $map = array(
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp',
+        'mp4' => 'video/mp4', 'm4v' => 'video/mp4', 'mov' => 'video/quicktime',
+        'webm' => 'video/webm', 'ogv' => 'video/ogg', 'avi' => 'video/x-msvideo',
+        'mkv' => 'video/x-matroska', '3gp' => 'video/3gpp', 'flv' => 'video/x-flv',
+        'wmv' => 'video/x-ms-wmv', 'mpeg' => 'video/mpeg', 'mpg' => 'video/mpeg',
+    );
+    return isset($map[$ext]) ? $map[$ext] : $fallback;
+}
 
 /**
- * 把 /uploads/ 下的头像文件备份到数据库。
- * 这样即使升级部署包覆盖或清空了 uploads 目录，头像也能自动恢复，不需要用户重新设置。
+ * 把 /uploads/ 下的文件备份到数据库。
+ * 这样即使升级部署包覆盖或清空了 uploads 目录、或主机清理文件，
+ * 头像 / 动态图片 / 视频也能自动恢复，不需要用户重新上传。
+ *
+ * 备份是「尽力而为」：体积超过上限或数据库写入失败时静默跳过，不影响上传本身。
  */
-function jc_avatar_backup($url)
+function jc_file_backup($url, $maxBytes = 8388608)
 {
     $url = (string) $url;
-    if ($url === '' || strpos($url, '/uploads/') !== 0) {
+    if ($url === '' || strpos($url, '/uploads/') !== 0 || strpos($url, '..') !== false) {
         return;
     }
     if (db_one('SELECT `url` FROM `avatar_files` WHERE `url` = ?', array($url))) {
@@ -357,43 +390,38 @@ function jc_avatar_backup($url)
         return;
     }
     $size = @filesize($file);
-    if (!$size || $size > 8 * 1024 * 1024) {
+    if (!$size || $size > $maxBytes) {
         return;
     }
     $bin = @file_get_contents($file);
     if ($bin === false || $bin === '') {
         return;
     }
-    $mime = 'image/jpeg';
-    if (function_exists('finfo_open')) {
-        $fi = @finfo_open(FILEINFO_MIME_TYPE);
-        if ($fi) {
-            $m = (string) @finfo_file($fi, $file);
-            @finfo_close($fi);
-            if ($m !== '') {
-                $mime = $m;
-            }
-        }
-    } else {
-        $ext = strtolower((string) pathinfo($file, PATHINFO_EXTENSION));
-        $map = array(
-            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
-            'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp',
+    try {
+        db_exec_ignore(
+            'INSERT INTO `avatar_files` (`url`, `mime`, `data`, `created_at`) VALUES (?, ?, ?, ?)',
+            array($url, jc_file_mime($file), base64_encode($bin), now_ms())
         );
-        if (isset($map[$ext])) {
-            $mime = $map[$ext];
-        }
+    } catch (Exception $e) {
+        // 数据库容量/数据包大小受限时忽略，上传照常成功
+    } catch (Throwable $e) {
     }
-    db_exec_ignore(
-        'INSERT INTO `avatar_files` (`url`, `mime`, `data`, `created_at`) VALUES (?, ?, ?, ?)',
-        array($url, $mime, base64_encode($bin), now_ms())
-    );
 }
 
-/** 头像文件缺失时从数据库恢复并直接输出；返回是否已处理 */
-function jc_avatar_restore($url)
+/** 兼容旧调用：头像备份走同一套逻辑 */
+function jc_avatar_backup($url)
 {
-    $row = db_one('SELECT `mime`, `data` FROM `avatar_files` WHERE `url` = ?', array((string) $url));
+    jc_file_backup($url);
+}
+
+/** 文件在磁盘上缺失时，从数据库备份写回磁盘；返回是否恢复成功 */
+function jc_file_restore_to_disk($url)
+{
+    $url = (string) $url;
+    if ($url === '' || strpos($url, '/uploads/') !== 0 || strpos($url, '..') !== false) {
+        return false;
+    }
+    $row = db_one('SELECT `data` FROM `avatar_files` WHERE `url` = ?', array($url));
     if (!$row) {
         return false;
     }
@@ -406,15 +434,30 @@ function jc_avatar_restore($url)
     if (!is_dir($dir)) {
         @mkdir($dir, 0777, true);
     }
-    @file_put_contents($full, $bin);
+    return @file_put_contents($full, $bin) !== false;
+}
+
+/** 文件缺失时从数据库恢复并直接输出；返回是否已处理 */
+function jc_avatar_restore($url)
+{
+    $row = db_one('SELECT `mime`, `data` FROM `avatar_files` WHERE `url` = ?', array((string) $url));
+    if (!$row) {
+        return false;
+    }
+    $bin = base64_decode((string) $row['data']);
+    if ($bin === false || $bin === '') {
+        return false;
+    }
+    jc_file_restore_to_disk($url);
     header('Content-Type: ' . ((string) $row['mime'] !== '' ? (string) $row['mime'] : 'image/jpeg'));
     header('Content-Length: ' . strlen($bin));
     header('Cache-Control: public, max-age=31536000, immutable');
+    header('X-Content-Type-Options: nosniff');
     echo $bin;
     return true;
 }
 
-/** 升级时把当前在用的上传头像统一备份一次 */
+/** 升级时把当前在用的上传文件统一备份一次 */
 function jc_avatar_backup_existing()
 {
     foreach (db_all("SELECT `avatar` FROM `users` WHERE `avatar` LIKE '/uploads/%'") as $r) {
@@ -427,6 +470,34 @@ function jc_avatar_backup_existing()
     if ($ai !== '') {
         jc_avatar_backup($ai);
     }
+}
+
+/**
+ * 头像值规范化：
+ *   允许 preset:N 短标记、站内 /uploads /assets 路径、http(s) 外链、data:image 内联图。
+ *   其他协议（javascript:、file: 等）一律拒绝，避免被注入到 <img src> 造成安全问题。
+ *   返回 null 表示该值不合法。
+ */
+function jc_normalize_avatar($value)
+{
+    $v = trim((string) $value);
+    if ($v === '') {
+        return '';
+    }
+    if (preg_match('/^preset:(\d{1,2})$/', $v, $m)) {
+        $i = (int) $m[1];
+        return $i >= 0 && $i < 64 ? ('preset:' . $i) : null;
+    }
+    if (strpos($v, '/uploads/') === 0 || strpos($v, '/assets/') === 0) {
+        return strpos($v, '..') === false ? $v : null;
+    }
+    if (preg_match('#^https?://#i', $v)) {
+        return mb_substr($v, 0, 1000, 'UTF-8');
+    }
+    if (preg_match('#^data:image/[a-z0-9.+-]+[^,]*,#i', $v)) {
+        return strlen($v) <= 1900 ? $v : null;
+    }
+    return null;
 }
 
 /* ----------------------------- 种子数据 ----------------------------- */
