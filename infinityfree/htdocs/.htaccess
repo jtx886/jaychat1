@@ -39,6 +39,14 @@
 # 首页优先由 PHP 处理（用于 IP 黑名单拦截）
 DirectoryIndex index.php index.html
 
+# index.html 禁止缓存：升级部署后浏览器/WebView 必须立刻拿到新的资源清单，
+# 否则会继续用旧 JS，表现为「部署了修复但问题依旧」。
+<FilesMatch "^(index\.html)$">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, must-revalidate"
+  </IfModule>
+</FilesMatch>
+
 # 禁止目录列出
 Options -Indexes
 
