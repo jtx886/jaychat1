@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { api, ws, mediaUrl, getBase } from '../api.js';
+import { api, ws, mediaUrl, getBase, mapPool } from '../api.js';
 import { useApp } from '../App.jsx';
 import {
   Avatar, TopBar, Sheet, ActionSheet, toast, Spinner, MediaViewer, MediaPicker, CameraPicker, Empty, VideoPlayer, SmartImage,
@@ -570,14 +570,15 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     setSending(true);
     setPanel(null);
     try {
-      for (const item of pendingFiles) {
+      // 2 路并发上传 + 发送：多张图片/视频不再一张等一张，速度翻倍
+      await mapPool(pendingFiles, 2, async (item) => {
         const up = await api.upload(item.file, item.type);
         const d = await api.post('/api/messages', {
           convType, convId, msg_type: up.kind === 'video' ? 'video' : 'image',
           media_url: up.url, media_thumb: '', one_time: oneTime, burn_sec: burnSec,
         });
         setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
-      }
+      });
       setTimeout(scrollToBottom, 60);
       toast(oneTime ? `一次性消息已发送（对方查看后 ${burnSec} 秒自动销毁）` : '发送成功');
     } catch (e) {

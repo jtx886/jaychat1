@@ -263,9 +263,12 @@ function jc_store_upload($tmp, $name, $size, $cleanup)
     }
 
     $rel = '/uploads/' . $sub . '/' . $filename;
-    // 上传完成后立刻在数据库留存一份（图片 / 视频都备份）：
+    // 响应发送完成后再写数据库备份：大文件 base64 后的 INSERT 可能耗时 1~2 秒，
+    // 放在请求体内会明显拖慢上传返回；shutdown 阶段执行，用户先拿到上传结果。
     // 即使之后部署包覆盖 uploads 目录或主机清理文件，/api/media 也能自动恢复。
-    jc_file_backup($rel);
+    if (function_exists('jc_file_backup')) {
+        register_shutdown_function('jc_file_backup', $rel);
+    }
 
     return array(200, array(
         'url' => $rel,

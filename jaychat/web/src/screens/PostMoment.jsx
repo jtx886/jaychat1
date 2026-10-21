@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../api.js';
+import { api, mapPool } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Avatar, Sheet, TopBar, toast, Spinner, MediaPicker } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
@@ -23,13 +23,14 @@ export default function PostMomentScreen() {
 
   const pick = async (files) => {
     try {
-      let count = media.length;
-      for (const f of files) {
-        if (count >= 9) break;
+      const room = Math.max(0, 9 - media.length);
+      const list = (files || []).slice(0, room);
+      if (!list.length) return;
+      // 2 路并发上传：9 张图不再一张等一张
+      await mapPool(list, 2, async (f) => {
         const up = await api.upload(f, isVideoFile(f) ? 'video' : 'image');
-        count += 1;
-        setMedia((list) => (list.length >= 9 ? list : [...list, { url: up.url, type: up.kind, localPreview: URL.createObjectURL(f) }]));
-      }
+        setMedia((l) => (l.length >= 9 ? l : [...l, { url: up.url, type: up.kind, localPreview: URL.createObjectURL(f) }]));
+      });
     } catch (e) {
       toast(e.message, 'error');
     }

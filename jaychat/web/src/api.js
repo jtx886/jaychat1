@@ -129,17 +129,21 @@ export const api = {
  * 共享主机常见的三个坑，这里逐一兜住：
  *   1) 手机原图 3~8MB，超过主机 upload_max_filesize / post_max_size → 先在前端压缩到 1MB 内；
  *   2) 部分主机/WAF 直接拦截 multipart/form-data 并返回 403 → 自动改用 application/octet-stream；
- *   3) 视频动辄十几 MB，任何单次请求都超限 → 自动切片上传（每片 512KB）后由服务端合并。
+ *   3) 视频动辄十几 MB，任何单次请求都超限 → 自动切片上传（每片 1.5MB，2 路并行）后由服务端合并。
  * 三者任意一条可用，上传就能成功。
  */
 const UPLOAD_TIMEOUT = 180000;
-const CHUNK_SIZE = 512 * 1024;
+// 单片 1.5MB：线上 post_max_size 实测约 10MB，1.5MB 绝对安全且请求数比 512KB 少 2/3
+const CHUNK_SIZE = 1536 * 1024;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 // 单次请求安全的体积上限：免费主机 upload_max_filesize 通常只有 2MB，
 // 超过这个值直接走分片，避免先发一次注定失败的大请求。
 const SINGLE_MAX = 1200 * 1024;
 const IMAGE_TARGET = 700 * 1024;
 const IMAGE_MAX_SIDE = 1920;
+// 分片并发数：免费主机单请求往返（RTT）高，2 路并行可把上传速度提近一倍，
+// 同时不会占满主机仅有的并发 worker。
+const CHUNK_CONCURRENCY = 2;
 
 function randomHex(n) {
   const bytes = new Uint8Array(n);
@@ -297,22 +301,58 @@ async function uploadChunked(file, kind) {
     return data;
   };
 
-  for (let i = 0; i < total; i += 1) {
-    let data;
-    try {
-      data = await postChunk(i);
-    } catch (e) {
-      // 网络抖动导致单片失败时自动重试一次（鉴权/参数类错误不重试）
-      if (!e.status) {
-        await new Promise((r) => setTimeout(r, 600));
-        data = await postChunk(i);
-      } else {
-        throw e;
+  // 并发池：按序分发分片，最多 CHUNK_CONCURRENCY 路同时在传（分片乱序到达不影响合并）
+  let next = 0;
+  let firstError = null;
+  const worker = async () => {
+    while (next < total && !firstError) {
+      const i = next;
+      next += 1;
+      try {
+        let data;
+        try {
+          data = await postChunk(i);
+        } catch (e) {
+          // 网络抖动导致单片失败时自动重试一次（鉴权/参数类错误不重试）
+          if (!e.status) {
+            await new Promise((r) => setTimeout(r, 600));
+            data = await postChunk(i);
+          } else {
+            throw e;
+          }
+        }
+        // 最后一片到齐时服务端在本次请求里合并完成并返回 url
+        if (data && data.url) return data;
+      } catch (e) {
+        firstError = firstError || e;
+        return null;
       }
     }
-    if (data && data.url) return data;
-  }
+    return null;
+  };
+  const results = await Promise.all(
+    Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker),
+  );
+  if (firstError) throw firstError;
+  const done = results.find(Boolean);
+  if (done && done.url) return done;
   throw new ApiError('上传未完成，请重试', 0);
+}
+
+/** 有限并发地处理列表（多文件上传提速用） */
+export async function mapPool(items, limit, fn) {
+  const list = Array.from(items || []);
+  const results = new Array(list.length);
+  let idx = 0;
+  const worker = async () => {
+    while (idx < list.length) {
+      const i = idx;
+      idx += 1;
+      results[i] = await fn(list[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, list.length)) }, worker));
+  return results;
 }
 
 async function uploadFile(file, kind) {
@@ -457,7 +497,9 @@ class Realtime {
   async pollOnce() {
     if (this.mode !== 'poll' || !tokenStore.get()) return;
     let ok = false;
-    const wait = this.longPoll ? 12 : 0;
+    // 免费主机 PHP worker 并发极少：长轮询挂太久会占住 worker，
+    // 导致页面/其他接口排队变慢。8 秒在实时性与流畅度之间取平衡。
+    const wait = this.longPoll ? 8 : 0;
     try {
       const d = await http(
         '/api/poll?since=' + this.cursor + (wait ? '&wait=' + wait : ''),
