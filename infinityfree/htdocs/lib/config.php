@@ -27,9 +27,10 @@ function jc_default_config()
         // 开发模式：true 时 /api/health 返回 dev_mode=true
         'DEV_MODE' => true,
 
-        // 是否允许把注册/找回验证码直接回传（InfinityFree 无 SMTP，默认开启）
-        // 强烈建议仅个人演示使用；设为 false 则 send-code 不会再回传 devCode
-        'ALLOW_DEV_CODE' => true,
+        // 是否允许把注册/找回验证码直接回传。
+        // 默认关闭：回传验证码等于任何人都能重置任意邮箱账号，属于高危漏洞。
+        // 仅在本地调试且 DEV_MODE=true 时才允许临时开启。
+        'ALLOW_DEV_CODE' => false,
 
         // 上传大小上限（字节）。InfinityFree 单文件上限 10MB
         'UPLOAD_MAX_BYTES' => 10 * 1024 * 1024,
@@ -149,5 +150,6 @@ function jc_schema_version()
     // v5：撤回消息原文留存表（管理后台「聊天记录」可查看撤回内容）
     // v6：动态评论支持图片 / 视频 / 表情 / 动画表情包（新增评论类型与媒体字段）
     // v7：群聊支持解散（新增 dissolved 标记，解散后保留会话与历史消息、禁止发言）
-    return 7;
+    // v8：安全加固（用户 IP 记录、IP 黑名单、接口限流表）
+    return 8;
 }

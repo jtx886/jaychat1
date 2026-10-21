@@ -19,6 +19,8 @@ function jc_week_key()
 /** 校验验证码；通过则标记已用，返回 null；否则返回错误文案 */
 function jc_check_code($email, $purpose, $code)
 {
+    // 防验证码穷举：同一邮箱 10 分钟内最多校验 20 次
+    jc_rate_limit('verify_code', 20, 600000, 'mail:' . strtolower((string) $email));
     $row = db_one(
         'SELECT * FROM `verify_codes` WHERE `email` = ? AND `purpose` = ? AND `used` = 0 AND `expires_at` > ? ORDER BY `id` DESC LIMIT 1',
         array($email, $purpose, now_ms())
@@ -41,6 +43,8 @@ function jc_gen_code()
 
 // 发送验证码
 route('POST', '#^/api/auth/send-code$#', function ($params, $body) {
+    // 防刷：单 IP 每小时最多 8 次验证码
+    jc_rate_limit('send_code', 8, 3600000);
     $email = isset($body['email']) ? (string) $body['email'] : '';
     $purpose = isset($body['purpose']) && $body['purpose'] !== '' ? (string) $body['purpose'] : 'register';
     if (!email_valid($email)) {
@@ -75,7 +79,8 @@ route('POST', '#^/api/auth/send-code$#', function ($params, $body) {
     if (!empty($mail['sent'])) {
         return array(200, array('ok' => true, 'sent' => true, 'hint' => '验证码已发送至 ' . $email . '，请查收（含垃圾箱）'));
     }
-    $dev = jc_config('ALLOW_DEV_CODE') ? $code : null;
+    // 回传验证码是高危行为：必须同时开启 DEV_MODE 与 ALLOW_DEV_CODE
+    $dev = (jc_config('DEV_MODE') && jc_config('ALLOW_DEV_CODE')) ? $code : null;
     return array(200, array(
         'ok' => true,
         'sent' => false,
@@ -87,6 +92,8 @@ route('POST', '#^/api/auth/send-code$#', function ($params, $body) {
 
 // 注册
 route('POST', '#^/api/auth/register$#', function ($params, $body) {
+    // 防批量注册：单 IP 每小时最多 8 个账号
+    jc_rate_limit('register', 8, 3600000);
     $username = isset($body['username']) ? $body['username'] : null;
     $email = isset($body['email']) ? (string) $body['email'] : '';
     $password = isset($body['password']) ? $body['password'] : null;
@@ -120,6 +127,7 @@ route('POST', '#^/api/auth/register$#', function ($params, $body) {
         array($uname, $email, hash_password($password), '', now_ms())
     );
     join_official_group($uid);
+    jc_touch_user_ip($uid);
 
     $u = get_user($uid);
     return array(200, array('token' => sign_token($uid), 'user' => self_user($u)));
@@ -132,14 +140,19 @@ route('POST', '#^/api/auth/login$#', function ($params, $body) {
     if ($account === '' || !$password) {
         return array(400, array('error' => '请输入账号和密码'));
     }
+
+    // 防暴力破解：单 IP 10 分钟内 10 次；单账号 15 分钟内 6 次
+    jc_rate_limit('login', 10, 600000);
+    jc_rate_limit('login_acct', 6, 900000, 'acct:' . strtolower($account));
+
     $u = strpos($account, '@') !== false
         ? db_one('SELECT * FROM `users` WHERE `email` = ?', array($account))
         : db_one('SELECT * FROM `users` WHERE `username` = ?', array($account));
     if (!$u) {
-        return array(400, array('error' => '账号不存在'));
+        return array(400, array('error' => '账号或密码错误'));
     }
     if (!verify_password($password, $u['pwd'])) {
-        return array(400, array('error' => '密码错误'));
+        return array(400, array('error' => '账号或密码错误'));
     }
     $ban = jc_ban_state($u);
     if ($ban['banned']) {
@@ -147,11 +160,17 @@ route('POST', '#^/api/auth/login$#', function ($params, $body) {
             ? ('该账号已被封禁，剩余 ' . (int) ceil(($ban['until'] - now_ms()) / 1000) . ' 秒')
             : '该账号已被永久封禁'));
     }
+    // 登录成功：清空该账号/IP 的失败计数，并立即记录真实 IP
+    jc_rate_clear('login_acct', 'acct:' . strtolower($account));
+    jc_rate_clear('login');
+    jc_touch_user_ip((int) $u['id']);
     return array(200, array('token' => sign_token((int) $u['id']), 'user' => self_user($u)));
 });
 
 // 忘记密码
 route('POST', '#^/api/auth/reset-password$#', function ($params, $body) {
+    // 防撞库：单 IP 每小时最多 6 次重置尝试
+    jc_rate_limit('reset', 6, 3600000);
     $email = isset($body['email']) ? (string) $body['email'] : '';
     $code = isset($body['code']) ? $body['code'] : null;
     $password = isset($body['password']) ? $body['password'] : null;

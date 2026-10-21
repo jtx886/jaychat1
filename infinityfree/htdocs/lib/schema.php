@@ -39,6 +39,10 @@ function jc_schema_tables()
                 array('banned_until', 'bigint', 'default:0'),
                 // 全站禁言：muted_until>now 时禁止在任何会话发消息
                 array('muted_until', 'bigint', 'default:0'),
+                // 最近一次访问的真实 IP / 时间 / UA（管理后台「用户IP」实时展示）
+                array('last_ip', 'str:64', 'default:'),
+                array('last_ip_at', 'bigint', 'default:0'),
+                array('last_ua', 'str:190', 'default:'),
                 array('created_at', 'bigint', 'notnull'),
             ),
         ),
@@ -250,6 +254,39 @@ function jc_schema_tables()
             ),
             'pk' => array('user_id', 'ukey'),
         ),
+        // IP 访问记录（按 IP + 用户聚合，用于后台查看真实 IP）
+        'ip_records' => array(
+            'cols' => array(
+                array('ip', 'str:64', 'notnull'),
+                array('user_id', 'int', 'default:0'),
+                array('hits', 'int', 'default:0'),
+                array('first_seen', 'bigint', 'notnull'),
+                array('last_seen', 'bigint', 'notnull'),
+                array('last_path', 'str:190', 'default:'),
+                array('ua', 'str:190', 'default:'),
+            ),
+            'pk' => array('ip', 'user_id'),
+        ),
+        // IP 黑名单（until=0 永久封禁）
+        'ip_blocks' => array(
+            'cols' => array(
+                array('ip', 'str:64', 'notnull'),
+                array('reason', 'str:190', 'default:'),
+                array('until', 'bigint', 'default:0'),
+                array('created_by', 'int', 'default:0'),
+                array('created_at', 'bigint', 'notnull'),
+            ),
+            'pk' => array('ip'),
+        ),
+        // 接口限流计数（固定窗口）
+        'rate_limits' => array(
+            'cols' => array(
+                array('k', 'str:190', 'notnull'),
+                array('hits', 'int', 'default:0'),
+                array('window_start', 'bigint', 'notnull'),
+            ),
+            'pk' => array('k'),
+        ),
         // 安装标记表
         'jc_meta' => array(
             'cols' => array(
@@ -382,6 +419,8 @@ function jc_schema_indexes($driver)
         'CREATE INDEX ' . $ine . 'idx_events_user ON `events` (`user_id`, `id`)',
         'CREATE INDEX ' . $ine . 'idx_recalled_conv ON `message_recalled` (`conv_type`, `conv_id`, `message_id`)',
         'CREATE INDEX ' . $ine . 'idx_verify_email ON `verify_codes` (`email`)',
+        'CREATE INDEX ' . $ine . 'idx_ip_last ON `ip_records` (`last_seen`)',
+        'CREATE INDEX ' . $ine . 'idx_ip_user ON `ip_records` (`user_id`)',
     );
 }
 

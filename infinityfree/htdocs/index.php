@@ -16,13 +16,33 @@ if (!defined('JC_HTDOCS')) {
     define('JC_HTDOCS', __DIR__);
 }
 
-/* ------------------------------ CORS（镜像 cors() 全放开） ------------------------------ */
-header('Access-Control-Allow-Origin: *');
+require_once __DIR__ . '/lib/security.php';
+
+/* ------------------------------ 安全响应头 ------------------------------ */
+jc_security_headers();
+
+/* ------------------------------ CORS（仅允许同源与本地容器） ------------------------------
+ * 说明：接口使用 Bearer token，不需要跨域携带 Cookie。
+ * 之前全放开的 Access-Control-Allow-Origin: * 会让任意站点直接调用接口，
+ * 这里收紧为：同源、以及 Capacitor 打包容器使用的本地源。 */
+$origin = isset($_SERVER['HTTP_ORIGIN']) ? (string) $_SERVER['HTTP_ORIGIN'] : '';
+if ($origin !== '' && $origin !== 'null') {
+    $allowedOrigin = false;
+    $originHost = parse_url($origin, PHP_URL_HOST);
+    $selfHost = isset($_SERVER['HTTP_HOST']) ? preg_replace('/:\d+$/', '', (string) $_SERVER['HTTP_HOST']) : '';
+    if ($originHost && $selfHost && strcasecmp($originHost, $selfHost) === 0) {
+        $allowedOrigin = true;
+    }
+    if (in_array($origin, array('capacitor://localhost', 'ionic://localhost', 'http://localhost', 'https://localhost'), true)) {
+        $allowedOrigin = true;
+    }
+    if ($allowedOrigin) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Vary: Origin');
+    }
+}
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-$reqHeaders = isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'])
-    ? $_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']
-    : 'Content-Type, Authorization';
-header('Access-Control-Allow-Headers: ' . $reqHeaders);
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Max-Age: 86400');
 
 $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper($_SERVER['REQUEST_METHOD']) : 'GET';
@@ -62,15 +82,25 @@ function jc_respond($status, $data)
     echo jc_json($data);
 }
 
-/* 读取 JSON 请求体（限制 2MB，与 express.json({limit:'2mb'}) 对齐） */
+/* 读取 JSON 请求体（超过 2MB 直接拒绝，避免超大包拖垮共享主机） */
 function jc_read_body()
 {
+    $len = isset($_SERVER['CONTENT_LENGTH']) ? (int) $_SERVER['CONTENT_LENGTH'] : 0;
+    if ($len > 2 * 1024 * 1024) {
+        http_response_code(413);
+        header('Content-Type: application/json; charset=utf-8');
+        echo jc_json(array('error' => '请求内容过大'));
+        exit;
+    }
     $raw = file_get_contents('php://input');
     if ($raw === false) {
         return array();
     }
     if (strlen($raw) > 2 * 1024 * 1024) {
-        $raw = substr($raw, 0, 2 * 1024 * 1024);
+        http_response_code(413);
+        header('Content-Type: application/json; charset=utf-8');
+        echo jc_json(array('error' => '请求内容过大'));
+        exit;
     }
     $data = json_decode($raw, true);
     return is_array($data) ? $data : array();
@@ -122,6 +152,24 @@ if ($isApi) {
         exit;
     }
 
+    // IP 黑名单：任何接口调用前统一拦截
+    jc_enforce_ip_block('api');
+
+    // 全站接口限流：单 IP 每分钟 300 次（正常轮询远低于此值）
+    jc_rate_limit('api', 300, 60000);
+
+    // 记录真实 IP（登录用户同步到 users.last_ip，供后台「用户IP」实时查看）
+    $trackUid = 0;
+    try {
+        $trackPayload = verify_token(request_token());
+        if ($trackPayload) {
+            $trackUid = (int) $trackPayload['uid'];
+        }
+    } catch (Exception $e) {
+        $trackUid = 0;
+    }
+    jc_track_ip($trackUid, $path);
+
     // 健康检查
     if ($method === 'GET' && $path === '/api/health') {
         jc_respond(200, array(
@@ -164,6 +212,15 @@ if ($isApi) {
 }
 
 /* ------------------------------ SPA 前端兜底 ------------------------------ */
+// 非 API 请求也检查 IP 黑名单：被封禁的 IP 连页面都无法打开
+try {
+    require_once __DIR__ . '/lib/bootstrap.php';
+    jc_enforce_ip_block('html');
+} catch (Exception $e) {
+    // 数据库未配置或不可用时不阻断页面（交由安装向导/错误提示处理）
+} catch (Throwable $e) {
+}
+
 // 尚未安装（缺少 config.local.php）→ 引导到安装向导
 if ($path !== '/install.php'
     && !is_file(__DIR__ . '/lib/config.local.php')

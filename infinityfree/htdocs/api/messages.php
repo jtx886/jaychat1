@@ -115,8 +115,50 @@ function mark_read_bulk($uid, $ids, $conv_type, $conv_id)
 
 const JC_VIDEO_EXT = array('.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv', '.3gp', '.flv', '.wmv', '.mpeg', '.mpg');
 
+/** 依据真实文件内容判断类型与安全扩展名；不支持的类型返回 null */
+function jc_upload_type($tmp, $clientExt)
+{
+    $mime = '';
+    if (function_exists('finfo_open')) {
+        $fi = @finfo_open(FILEINFO_MIME_TYPE);
+        if ($fi) {
+            $mime = (string) @finfo_file($fi, $tmp);
+            @finfo_close($fi);
+        }
+    }
+    // SVG 可携带脚本，直接拒绝，避免存储型 XSS
+    if ($mime === 'image/svg+xml') {
+        return null;
+    }
+    $imageMap = array(
+        'image/jpeg' => '.jpg', 'image/png' => '.png', 'image/gif' => '.gif',
+        'image/webp' => '.webp', 'image/bmp' => '.bmp',
+    );
+    $videoMap = array(
+        'video/mp4' => '.mp4', 'video/quicktime' => '.mov', 'video/webm' => '.webm',
+        'video/x-msvideo' => '.avi', 'video/x-matroska' => '.mkv', 'video/3gpp' => '.3gp',
+        'video/x-flv' => '.flv', 'video/x-ms-wmv' => '.wmv', 'video/mpeg' => '.mpeg',
+    );
+    if (isset($imageMap[$mime])) {
+        return array('kind' => 'image', 'ext' => $imageMap[$mime]);
+    }
+    if (isset($videoMap[$mime])) {
+        return array('kind' => 'video', 'ext' => $videoMap[$mime]);
+    }
+    // 主机未开启 fileinfo 时，退化为扩展名白名单（仍拒绝脚本类扩展名）
+    $allowed = array_merge(array_values($imageMap), array_values($videoMap), JC_VIDEO_EXT);
+    $clientExt = strtolower((string) $clientExt);
+    if (in_array($clientExt, $allowed, true)) {
+        $isVideo = in_array($clientExt, JC_VIDEO_EXT, true);
+        return array('kind' => $isVideo ? 'video' : 'image', 'ext' => $clientExt);
+    }
+    return null;
+}
+
 route('POST', '#^/api/upload$#', function ($params, $body) {
-    require_auth();
+    $uid = require_auth();
+    // 防止刷上传占满空间/带宽：单用户每分钟最多 20 次
+    jc_rate_limit('upload', 20, 60000, 'user:' . $uid);
 
     if (!isset($_FILES['file'])) {
         return array(400, array('error' => '未收到文件'));
