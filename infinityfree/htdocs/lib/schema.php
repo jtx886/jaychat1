@@ -24,7 +24,8 @@ function jc_schema_tables()
                 array('username', 'str:64', 'notnull unique'),
                 array('email', 'str:128', 'notnull unique'),
                 array('pwd', 'str:255', 'notnull'),
-                array('avatar', 'str:255', 'default:'),
+                // 头像可能是上传图片 URL，也可能是预设头像的 data URI（约 800 字符），需大于 255
+                array('avatar', 'str:2000', 'default:'),
                 array('bio', 'str:255', 'default:'),
                 array('is_official', 'int', 'default:0'),
                 array('online', 'int', 'default:0'),
@@ -80,7 +81,8 @@ function jc_schema_tables()
             'cols' => array(
                 array('id', 'pk', 'auto'),
                 array('name', 'str:64', 'notnull'),
-                array('avatar', 'str:255', 'default:'),
+                // 头像可能是上传图片 URL，也可能是预设头像的 data URI（约 800 字符），需大于 255
+                array('avatar', 'str:2000', 'default:'),
                 array('owner_id', 'int', 'notnull'),
                 array('announcement', 'str:255', 'default:'),
                 array('is_official', 'int', 'default:0'),
@@ -287,6 +289,16 @@ function jc_schema_tables()
             ),
             'pk' => array('k'),
         ),
+        // 头像文件备份：升级覆盖 uploads 后可从数据库自动恢复用户/群/AI 头像
+        'avatar_files' => array(
+            'cols' => array(
+                array('url', 'str:255', 'notnull'),
+                array('mime', 'str:64', 'default:image/jpeg'),
+                array('data', 'mediumtext', 'notnull'),
+                array('created_at', 'bigint', 'notnull'),
+            ),
+            'pk' => array('url'),
+        ),
         // 安装标记表
         'jc_meta' => array(
             'cols' => array(
@@ -312,6 +324,9 @@ function jc_col_type($kind, $driver)
     }
     if ($kind === 'text') {
         return 'TEXT';
+    }
+    if ($kind === 'mediumtext') {
+        return $driver === 'sqlite' ? 'TEXT' : 'MEDIUMTEXT';
     }
     if (strpos($kind, 'str:') === 0) {
         $n = intval(substr($kind, 4));

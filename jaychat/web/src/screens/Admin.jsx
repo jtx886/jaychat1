@@ -210,8 +210,7 @@ function AiConfig() {
     if (!cfg) return;
     setSaving(true);
     try {
-      // 用 POST 保存：部分共享主机 / WAF 会拦截 PATCH 等非常用方法，导致配置保存后不生效
-      const d = await api.post('/api/admin/ai', {
+      const d = await api.patch('/api/admin/ai', {
         url: cfg.url || '',
         key: cfg.key || '',
         model: cfg.model || '',
@@ -277,7 +276,7 @@ function AiConfig() {
       <div className="field">
         <label>接口地址</label>
         <input className="input" placeholder="https://api.openai.com/v1/chat/completions" value={cfg.url || ''} onChange={(e) => set('url', e.target.value)} />
-        <div className="hint">支持两种协议：Chat Completions（…/v1/chat/completions）与 Responses（…/v1/responses，如腾讯 TokenHub）</div>
+        <div className="hint">兼容 OpenAI 协议的第三方接口，一般以 /v1/chat/completions 结尾</div>
       </div>
 
       <div className="field mt">

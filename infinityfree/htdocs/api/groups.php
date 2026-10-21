@@ -179,6 +179,8 @@ route('PATCH', '#^/api/groups/(\d+)$#', function ($params, $body) {
     }
     if (array_key_exists('avatar', $body) && $body['avatar'] !== null) {
         db_run('UPDATE `groups` SET `avatar` = ? WHERE `id` = ?', array((string) $body['avatar'], $gid));
+        // 备份上传群头像文件：升级覆盖 uploads 后可自动恢复
+        jc_avatar_backup((string) $body['avatar']);
     }
     if (array_key_exists('announcement', $body) && $body['announcement'] !== null) {
         db_run('UPDATE `groups` SET `announcement` = ? WHERE `id` = ?', array(mb_substr((string) $body['announcement'], 0, 200, 'UTF-8'), $gid));

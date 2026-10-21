@@ -155,6 +155,10 @@ $jc_ai_save = function ($params, $body) {
                 $val = mb_substr($val, 0, 500, 'UTF-8');
             }
             jc_setting_set($key, $val);
+            if ($field === 'avatar') {
+                // AI 头像同样备份，升级覆盖 uploads 后可自动恢复
+                jc_avatar_backup($val);
+            }
         }
     }
     return array(200, array('ok' => true, 'config' => jc_ai_conf_public_out()));

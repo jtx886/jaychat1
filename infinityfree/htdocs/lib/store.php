@@ -337,6 +337,98 @@ function build_message($row, $extra = array())
     return $out;
 }
 
+/* --------------------------- 头像文件备份 / 自愈 --------------------------- */
+
+/**
+ * 把 /uploads/ 下的头像文件备份到数据库。
+ * 这样即使升级部署包覆盖或清空了 uploads 目录，头像也能自动恢复，不需要用户重新设置。
+ */
+function jc_avatar_backup($url)
+{
+    $url = (string) $url;
+    if ($url === '' || strpos($url, '/uploads/') !== 0) {
+        return;
+    }
+    if (db_one('SELECT `url` FROM `avatar_files` WHERE `url` = ?', array($url))) {
+        return;
+    }
+    $file = JC_HTDOCS . $url;
+    if (!is_file($file)) {
+        return;
+    }
+    $size = @filesize($file);
+    if (!$size || $size > 8 * 1024 * 1024) {
+        return;
+    }
+    $bin = @file_get_contents($file);
+    if ($bin === false || $bin === '') {
+        return;
+    }
+    $mime = 'image/jpeg';
+    if (function_exists('finfo_open')) {
+        $fi = @finfo_open(FILEINFO_MIME_TYPE);
+        if ($fi) {
+            $m = (string) @finfo_file($fi, $file);
+            @finfo_close($fi);
+            if ($m !== '') {
+                $mime = $m;
+            }
+        }
+    } else {
+        $ext = strtolower((string) pathinfo($file, PATHINFO_EXTENSION));
+        $map = array(
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+            'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp',
+        );
+        if (isset($map[$ext])) {
+            $mime = $map[$ext];
+        }
+    }
+    db_exec_ignore(
+        'INSERT INTO `avatar_files` (`url`, `mime`, `data`, `created_at`) VALUES (?, ?, ?, ?)',
+        array($url, $mime, base64_encode($bin), now_ms())
+    );
+}
+
+/** 头像文件缺失时从数据库恢复并直接输出；返回是否已处理 */
+function jc_avatar_restore($url)
+{
+    $row = db_one('SELECT `mime`, `data` FROM `avatar_files` WHERE `url` = ?', array((string) $url));
+    if (!$row) {
+        return false;
+    }
+    $bin = base64_decode((string) $row['data']);
+    if ($bin === false || $bin === '') {
+        return false;
+    }
+    $full = JC_HTDOCS . $url;
+    $dir = dirname($full);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0777, true);
+    }
+    @file_put_contents($full, $bin);
+    header('Content-Type: ' . ((string) $row['mime'] !== '' ? (string) $row['mime'] : 'image/jpeg'));
+    header('Content-Length: ' . strlen($bin));
+    header('Cache-Control: public, max-age=31536000, immutable');
+    echo $bin;
+    return true;
+}
+
+/** 升级时把当前在用的上传头像统一备份一次 */
+function jc_avatar_backup_existing()
+{
+    foreach (db_all("SELECT `avatar` FROM `users` WHERE `avatar` LIKE '/uploads/%'") as $r) {
+        jc_avatar_backup($r['avatar']);
+    }
+    foreach (db_all("SELECT `avatar` FROM `groups` WHERE `avatar` LIKE '/uploads/%'") as $r) {
+        jc_avatar_backup($r['avatar']);
+    }
+    $ai = (string) jc_setting('ai_avatar', '');
+    if ($ai !== '') {
+        jc_avatar_backup($ai);
+    }
+}
+
 /* ----------------------------- 种子数据 ----------------------------- */
 
 /** 种子：官方账号「杰同学」+「Jay Chat官方群」（等价 seedOfficial） */

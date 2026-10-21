@@ -229,6 +229,8 @@ route('PATCH', '#^/api/auth/me$#', function ($params, $body) {
     }
     if ($avatar !== null) {
         db_run('UPDATE `users` SET `avatar` = ? WHERE `id` = ?', array((string) $avatar, $uid));
+        // 备份上传头像文件：升级覆盖 uploads 后可自动恢复，无需重新设置
+        jc_avatar_backup((string) $avatar);
     }
     if ($bio !== null) {
         db_run('UPDATE `users` SET `bio` = ? WHERE `id` = ?', array((string) $bio, $uid));

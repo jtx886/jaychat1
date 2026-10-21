@@ -229,6 +229,20 @@ if ($path !== '/install.php'
     exit;
 }
 
+/* 头像自愈：升级覆盖 uploads 后，从数据库备份恢复头像文件 */
+if (preg_match('#^/uploads/[A-Za-z0-9_\-./]+$#', $path)
+    && strpos($path, '..') === false
+    && !is_file(__DIR__ . $path)) {
+    try {
+        require_once __DIR__ . '/lib/bootstrap.php';
+        if (jc_avatar_restore($path)) {
+            exit;
+        }
+    } catch (Exception $e) {
+    } catch (Throwable $e) {
+    }
+}
+
 $indexHtml = __DIR__ . '/index.html';
 if (is_file($indexHtml)) {
     header('Content-Type: text/html; charset=utf-8');

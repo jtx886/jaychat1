@@ -218,6 +218,26 @@ function db_install()
         } catch (Exception $e) {
         }
 
+        // v9 迁移：头像列扩容。预设头像是 data URI（约 800 字符），旧的 VARCHAR(255) 会被截断，
+        // 表现为「选了预设头像但显示不出来 / 升级后头像需要重设」。
+        if ($driver !== 'sqlite') {
+            try {
+                db()->exec('ALTER TABLE `users` MODIFY `avatar` VARCHAR(2000) NOT NULL DEFAULT \'\'');
+            } catch (Exception $e) {
+            }
+            try {
+                db()->exec('ALTER TABLE `groups` MODIFY `avatar` VARCHAR(2000) NOT NULL DEFAULT \'\'');
+            } catch (Exception $e) {
+            }
+        }
+        // 把当前正在使用的上传头像备份到数据库，之后升级即使覆盖 uploads 也能自动恢复
+        if (function_exists('jc_avatar_backup_existing')) {
+            try {
+                jc_avatar_backup_existing();
+            } catch (Exception $e) {
+            }
+        }
+
         // 写入版本标记
         try {
             $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('schema_version'));

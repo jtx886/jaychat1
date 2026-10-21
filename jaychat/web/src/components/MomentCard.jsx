@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { api, mediaUrl } from '../api.js';
-import { Avatar, ActionSheet, MediaViewer, toast } from '../components/ui.jsx';
+import { Avatar, ActionSheet, toast } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import { fullTime } from '../lib/time.js';
 import { useApp } from '../App.jsx';
@@ -9,7 +9,6 @@ import { useApp } from '../App.jsx';
 export default function MomentCard({ moment, onOpen, onLike, showCommentPreview = true, onDeleted }) {
   const { openUser, push } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [viewer, setViewer] = useState(null); // 动态图片/视频全屏查看
   const likeBusy = useRef(false);
   const m = moment;
   const media = (m.media || []).filter((x) => x.url);
@@ -51,16 +50,15 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
       {media.length ? (
         <div className={'moment-media ' + nCls}>
           {media.slice(0, 9).map((item, i) => (
-            <div
-              key={i}
-              onClick={() => setViewer({ url: item.url, type: item.type })}
-              style={{ position: 'relative', cursor: 'pointer' }}
-            >
+            <div key={i} onClick={() => onOpen?.('detail')} style={{ position: 'relative', cursor: 'pointer' }}>
               {item.type === 'video' ? (
-                <>
-                  <video src={mediaUrl(item.url)} muted playsInline preload="metadata" style={{ pointerEvents: 'none' }} />
-                  <span className="moment-play"><Icon name="play" size={22} filled color="#fff" /></span>
-                </>
+                <video
+                  src={mediaUrl(item.url)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onClick={(e) => e.stopPropagation()}
+                />
               ) : (
                 <img src={mediaUrl(item.url)} alt="" loading="lazy" />
               )}
@@ -116,8 +114,6 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           ))}
         </div>
       ) : null}
-
-      {viewer ? <MediaViewer item={viewer} onClose={() => setViewer(null)} /> : null}
 
       <ActionSheet
         open={menuOpen}
