@@ -108,6 +108,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         setDnd(!!g.group?.dnd);
       } else {
         api.get(`/api/users/${peerId}`).then((u) => setPeer(u.user)).catch(() => {});
+        // 进入会话立即拉一次对方在线状态（不等 App 层 30s 轮询）
+        api.get('/api/presence?ids=' + peerId)
+          .then((d) => {
+            const p = (d.presence || []).find((x) => Number(x.userId) === peerId);
+            if (p) app.setPresence((s) => ({ ...s, [peerId]: p.online }));
+          })
+          .catch(() => {});
       }
       refreshConversations();
     } catch (e) {
@@ -692,9 +699,12 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   }, [members, presence, isGroup]);
 
   const onlineCount = onlineMembers.length;
+  // 私聊在线状态：优先用实时 presence，其次用进入会话时拉取的对方资料（peer.online）。
+  // 注意私聊不加载 members（那是群聊的），旧代码回退到 members[0] 导致永远显示「离线」。
+  const peerOnline = !isGroup ? (presence[peerId] ?? peer?.online) : false;
   const headerSub = isGroup
     ? `${onlineCount} 人在线 · ${members.length} 人`
-    : presence[peerId] ?? members[0]?.online
+    : peerOnline
       ? '在线'
       : '离线';
 

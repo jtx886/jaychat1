@@ -40,6 +40,10 @@ export default function App() {
   const openConvRef = useRef(null);
   const bootingRef = useRef(false);
   const seenMsgRef = useRef(new Set());
+  // 最新会话列表的 ref：30s 在线轮询的 interval 只挂载一次，
+  // 直接用 state 会永远读到首帧的空数组（presence 因此从不更新）
+  const conversationsRef = useRef([]);
+  conversationsRef.current = conversations;
 
   /* ---------------- 启动 ---------------- */
   useEffect(() => {
@@ -93,7 +97,7 @@ export default function App() {
     refreshBadges();
     // 在线状态兜底轮询（30s）
     const t = setInterval(() => {
-      const ids = conversations.filter((c) => c.peer).map((c) => c.peer.id);
+      const ids = (conversationsRef.current || []).filter((c) => c.peer).map((c) => c.peer.id);
       if (ids.length) {
         api
           .get('/api/presence?ids=' + ids.join(','))
