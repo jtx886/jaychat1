@@ -11,6 +11,17 @@
     <link rel="apple-touch-icon" href="./logo-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Jay Chat</title>
+    <script>
+      // PHP 版首次部署兜底：若数据库未配置，直接打开 index.html 也要进入安装向导。
+      // （部分主机的 DirectoryIndex / .htaccess 不生效，会绕过 index.php 的安装检测）
+      (function () {
+        if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return;
+        fetch('./api/health', { cache: 'no-store', headers: { Accept: 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d && d.install) window.location.replace('./install.php'); })
+          .catch(function () {});
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

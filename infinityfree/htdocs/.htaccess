@@ -45,7 +45,8 @@
   # 2) API 统一交给 index.php 分发（/api、/api/、/api/health ...）
   RewriteRule ^api(/|$) index.php [L,QSA]
 
-  # 3) 入口页面也走 index.php，确保被封禁 IP 无法打开站点
+  # 3) 根路径与入口页面都走 index.php：确保安装引导、封禁 IP 检测不会被 index.html 抢先
+  RewriteRule ^$ index.php [L]
   RewriteRule ^index\.html$ index.php [L]
 
   # 4) 已存在的文件/目录直接访问（/uploads/*、/assets/*、前端构建产物）
