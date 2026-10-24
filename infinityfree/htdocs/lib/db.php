@@ -175,7 +175,9 @@ function db_install()
         // 版本一致之外，还必须确认关键表真实存在：
         // 某些主机曾出现「建表被静默拒绝但版本号已写入」的情况，导致后续升级
         // 不再建表、所有依赖该表的接口 500（头像/上传/媒体全部失败）。
-        if ($row !== null && (string) $row['value'] === $version && db_table_exists('avatar_files')) {
+        if ($row !== null && (string) $row['value'] === $version
+            && db_table_exists('avatar_files')
+            && db_table_exists('group_join_requests')) {
             $need = false;
         }
     } catch (Exception $e) {
