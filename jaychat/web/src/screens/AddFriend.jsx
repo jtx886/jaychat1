@@ -55,8 +55,8 @@ export default function AddFriendScreen({ tab = 'search' }) {
     }
   };
 
-  const doGroupSearch = async () => {
-    const kw = gq.trim();
+  const doGroupSearch = async (kwArg) => {
+    const kw = String(kwArg ?? gq).trim();
     if (!kw) return toast('请输入群名称或群 ID', 'error');
     setGSearching(true);
     try {
@@ -147,7 +147,25 @@ export default function AddFriendScreen({ tab = 'search' }) {
             </div>
 
             {searching ? <Loading /> : null}
-            {!searching && results.length === 0 && q ? <Empty icon="search" text="没有找到相关用户" /> : null}
+            {!searching && results.length === 0 && q ? (
+              <div>
+                <Empty icon="search" text="没有找到相关用户" />
+                {/^\d+$/.test(q.trim()) ? (
+                  <button
+                    className="btn btn-sm"
+                    style={{ display: 'block', margin: '0 auto 16px' }}
+                    onClick={() => {
+                      const kw = q.trim();
+                      setGq(kw);
+                      setMode('groups');
+                      doGroupSearch(kw);
+                    }}
+                  >
+                    在「群聊」中搜索 ID {q.trim()}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {results.length > 0 ? (
               <div className="glass mx mt">
                 <div className="list">
@@ -197,11 +215,11 @@ export default function AddFriendScreen({ tab = 'search' }) {
                   onChange={(e) => setGq(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && doGroupSearch()}
                 />
-                <button className="btn btn-primary" style={{ padding: '0 18px' }} onClick={doGroupSearch} disabled={gSearching}>
+                <button className="btn btn-primary" style={{ padding: '0 18px' }} onClick={() => doGroupSearch()} disabled={gSearching}>
                   {gSearching ? '…' : '搜索'}
                 </button>
               </div>
-              <div className="hint" style={{ marginTop: 8 }}>支持群名称模糊搜索或群 ID 精确查找，申请后需群主 / 管理员审核</div>
+              <div className="hint" style={{ marginTop: 8 }}>支持群名称模糊搜索，或群 ID 精确查找（可直接粘贴「群 ID：12」）；申请后需群主 / 管理员审核</div>
             </div>
 
             {gSearching ? <Loading /> : null}

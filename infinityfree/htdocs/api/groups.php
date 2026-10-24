@@ -410,16 +410,44 @@ route('GET', '#^/api/groups/search$#', function ($params, $body) {
         return array(200, array('groups' => array()));
     }
     jc_rate_limit('group_search', 60, 60000, 'user:' . $uid);
+
+    // 归一化：全角数字转半角、去掉所有空白（含全角空格/零宽字符），
+    // 兼容用户直接粘贴「群 ID：12」「群号：#12」「12 号群」等写法。
+    $compact = strtr($q, array(
+        '０' => '0', '１' => '1', '２' => '2', '３' => '3', '４' => '4',
+        '５' => '5', '６' => '6', '７' => '7', '８' => '8', '９' => '9',
+        '：' => ':', '＃' => '#', '　' => ' ',
+    ));
+    $compact = preg_replace('/[\s\x{3000}\x{200B}\x{FEFF}]+/u', '', $compact);
+    if ($compact === null) {
+        $compact = '';
+    }
+    // 是否带了「群 ID / ID / 群号 / #」这类前缀（用于识别「群 ID：12 · 3 人在线」这种整行粘贴）
+    $hadPrefix = (bool) preg_match('/^(#|群\s*id|群号|id)/iu', $compact);
+    $compact = preg_replace('/^[#＃]+/u', '', $compact);
+    $compact = preg_replace('/^(群\s*id|群号|id)\s*[:：#]?/iu', '', $compact);
+    $compact = preg_replace('/^[#＃]+/u', '', $compact);
+    if ($compact === null) {
+        $compact = '';
+    }
+
     $like = '%' . $q . '%';
-    if (preg_match('/^\d+$/', $q)) {
+    $idNum = null;
+    if (preg_match('/^(\d+)\s*号?(群)?$/u', $compact, $m)
+        || ($hadPrefix && preg_match('/^(\d+)/u', $compact, $m))) {
+        $idNum = (int) $m[1];
+    }
+    if ($idNum !== null) {
+        // 纯数字（含「群 ID：12」「#12」「12号群」等写法）：群 ID / IM 群号精确匹配，
+        // 同时保留名称里的数字匹配
         $rows = db_all(
-            'SELECT * FROM `groups` WHERE (`name` LIKE ? OR `id` = ?) AND `dissolved` = 0 ORDER BY `id` ASC LIMIT 20',
-            array($like, (int) $q)
+            'SELECT * FROM `groups` WHERE (`id` = ? OR `im_groupid` = ? OR `name` LIKE ?) AND `dissolved` = 0 ORDER BY `id` ASC LIMIT 20',
+            array($idNum, (string) $idNum, $like)
         );
     } else {
         $rows = db_all(
-            'SELECT * FROM `groups` WHERE `name` LIKE ? AND `dissolved` = 0 ORDER BY `id` ASC LIMIT 20',
-            array($like)
+            'SELECT * FROM `groups` WHERE (`name` LIKE ? OR `im_groupid` LIKE ?) AND `dissolved` = 0 ORDER BY `id` ASC LIMIT 20',
+            array($like, $like)
         );
     }
     $out = array();
