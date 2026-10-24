@@ -12,12 +12,16 @@ const TYPE_META = {
   moment_comment: { icon: 'message', tone: 'violet' },
   comment_reply: { icon: 'reply', tone: 'amber' },
   group_invite: { icon: 'users', tone: 'cyan' },
+  group_join_request: { icon: 'users', tone: 'cyan' },
+  group_join_accept: { icon: 'checkCircle', tone: 'mint' },
+  group_join_reject: { icon: 'close', tone: 'rose' },
 };
 
 export default function NotificationsScreen() {
-  const { back, refreshBadges, setNotifyUnread, push, openUser } = useApp();
+  const { back, refreshBadges, refreshConversations, setNotifyUnread, push, openUser } = useApp();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [joinBusy, setJoinBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -42,6 +46,27 @@ export default function NotificationsScreen() {
       push('momentDetail', { momentId: n.ref_id });
     } else if (n.type === 'friend_request') {
       push('addFriend', { tab: 'requests' });
+    }
+  };
+
+  // 群主 / 管理员在通知里审核入群申请
+  const handleJoin = async (n, accept) => {
+    if (joinBusy) return;
+    setJoinBusy(true);
+    try {
+      await api.post(`/api/groups/join-requests/${n.ref_id}/${accept ? 'accept' : 'reject'}`, {});
+      setItems((l) => l.filter((x) => x.id !== n.id));
+      toast(accept ? '已同意入群申请' : '已拒绝入群申请');
+      refreshBadges();
+      if (accept) refreshConversations();
+    } catch (e) {
+      toast(e.message, 'error');
+      // 申请已被其他管理员处理：移除这条过期通知
+      if (String(e.message || '').indexOf('已处理') >= 0) {
+        setItems((l) => l.filter((x) => x.id !== n.id));
+      }
+    } finally {
+      setJoinBusy(false);
     }
   };
 
@@ -74,6 +99,16 @@ export default function NotificationsScreen() {
                       <div className="hint" style={{ marginTop: 3 }} title={fullTime(n.created_at)}>
                         {fullTime(n.created_at)} · {fromNow(n.created_at)}
                       </div>
+                      {n.type === 'group_join_request' ? (
+                        <div className="flex gap8" style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+                          <button className="btn btn-sm" disabled={joinBusy} onClick={() => handleJoin(n, false)}>
+                            拒绝
+                          </button>
+                          <button className="btn btn-sm btn-primary" disabled={joinBusy} onClick={() => handleJoin(n, true)}>
+                            同意
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );

@@ -111,6 +111,14 @@ export default function ContactsScreen() {
               </div>
               <span className="chev dim">›</span>
             </div>
+            <div className="list-item" onClick={() => push('addFriend', { tab: 'groups' })}>
+              <Avatar name="群" size={44} style={{ background: 'linear-gradient(135deg,#3ad0e0,#1a9dbf)' }} />
+              <div className="list-main">
+                <div className="list-title">添加群聊</div>
+                <div className="list-desc">搜索群名称或群 ID，申请加入群聊</div>
+              </div>
+              <span className="chev dim">›</span>
+            </div>
           </div>
         </div>
 

@@ -400,6 +400,202 @@ route('POST', '#^/api/groups/(\d+)/dissolve$#', function ($params, $body) {
     return array(200, array('ok' => true));
 });
 
+/* ---------------------- 群聊搜索 / 申请加入 / 审核 ---------------------- */
+
+// 搜索群聊（支持群名称模糊搜索 + 群 ID 精确搜索）
+route('GET', '#^/api/groups/search$#', function ($params, $body) {
+    $uid = require_auth();
+    $q = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
+    if ($q === '') {
+        return array(200, array('groups' => array()));
+    }
+    jc_rate_limit('group_search', 60, 60000, 'user:' . $uid);
+    $like = '%' . $q . '%';
+    if (preg_match('/^\d+$/', $q)) {
+        $rows = db_all(
+            'SELECT * FROM `groups` WHERE (`name` LIKE ? OR `id` = ?) AND `dissolved` = 0 ORDER BY `id` ASC LIMIT 20',
+            array($like, (int) $q)
+        );
+    } else {
+        $rows = db_all(
+            'SELECT * FROM `groups` WHERE `name` LIKE ? AND `dissolved` = 0 ORDER BY `id` ASC LIMIT 20',
+            array($like)
+        );
+    }
+    $out = array();
+    foreach ($rows as $g) {
+        $role = member_role($g['id'], $uid);
+        $pending = db_one(
+            'SELECT `id` FROM `group_join_requests` WHERE `group_id` = ? AND `user_id` = ? AND `status` = ?',
+            array((int) $g['id'], $uid, 'pending')
+        );
+        $count = (int) db_value('SELECT COUNT(*) FROM `group_members` WHERE `group_id` = ?', array((int) $g['id']));
+        $out[] = array(
+            'id' => (int) $g['id'],
+            'name' => (string) $g['name'],
+            'avatar' => isset($g['avatar']) ? (string) $g['avatar'] : '',
+            'is_official' => !empty($g['is_official']),
+            'member_count' => $count,
+            'is_member' => $role !== null,
+            'my_role' => $role ? $role : '',
+            'pending' => $pending !== null,
+        );
+    }
+    return array(200, array('groups' => $out));
+});
+
+// 我提交的入群申请（待审核的群 ID）
+route('GET', '#^/api/groups/join-requests/sent$#', function ($params, $body) {
+    $uid = require_auth();
+    $rows = db_all(
+        'SELECT `group_id` FROM `group_join_requests` WHERE `user_id` = ? AND `status` = ?',
+        array($uid, 'pending')
+    );
+    $ids = array();
+    foreach ($rows as $r) {
+        $ids[] = (int) $r['group_id'];
+    }
+    return array(200, array('ids' => $ids));
+});
+
+// 申请加入群聊（需要群主 / 管理员在通知里审核）
+route('POST', '#^/api/groups/(\d+)/join-request$#', function ($params, $body) {
+    $uid = require_auth();
+    $gid = (int) $params[0];
+    $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
+    if (!$g) {
+        return array(404, array('error' => '群聊不存在'));
+    }
+    if (!empty($g['dissolved'])) {
+        return array(400, array('error' => '该群聊已解散'));
+    }
+    if (member_role($gid, $uid) !== null) {
+        return array(400, array('error' => '你已在该群聊中'));
+    }
+    // 防骚扰：单用户每小时最多申请 10 个群
+    jc_rate_limit('group_join', 10, 3600000, 'user:' . $uid);
+    $dup = db_one(
+        'SELECT `id` FROM `group_join_requests` WHERE `group_id` = ? AND `user_id` = ? AND `status` = ?',
+        array($gid, $uid, 'pending')
+    );
+    if ($dup) {
+        return array(400, array('error' => '已提交申请，等待管理员审核'));
+    }
+    $message = isset($body['message']) ? mb_substr(trim((string) $body['message']), 0, 60, 'UTF-8') : '';
+    $rid = db_insert(
+        'INSERT INTO `group_join_requests` (`group_id`, `user_id`, `message`, `status`, `created_at`) VALUES (?, ?, ?, ?, ?)',
+        array($gid, $uid, $message, 'pending', now_ms())
+    );
+    $me = public_user(get_user($uid));
+    // 通知群主与所有管理员
+    $admins = db_all(
+        'SELECT `user_id` FROM `group_members` WHERE `group_id` = ? AND (`role` = ? OR `role` = ?)',
+        array($gid, 'owner', 'admin')
+    );
+    foreach ($admins as $a) {
+        if ((int) $a['user_id'] === (int) $uid) {
+            continue;
+        }
+        create_notification(array(
+            'user_id' => (int) $a['user_id'],
+            'type' => 'group_join_request',
+            'actor_id' => $uid,
+            'text' => $me['username'] . ' 申请加入群聊「' . $g['name'] . '」' . ($message ? '：' . $message : ''),
+            'ref_type' => 'group_join_request',
+            'ref_id' => (int) $rid,
+        ));
+        event_to_user((int) $a['user_id'], 'group:join_request', array('groupId' => $gid, 'requestId' => (int) $rid));
+    }
+    return array(200, array('ok' => true, 'requestId' => (int) $rid));
+});
+
+// 同意入群申请（群主 / 管理员）
+route('POST', '#^/api/groups/join-requests/(\d+)/accept$#', function ($params, $body) {
+    $uid = require_auth();
+    $r = db_one('SELECT * FROM `group_join_requests` WHERE `id` = ?', array((int) $params[0]));
+    if (!$r) {
+        return array(404, array('error' => '申请不存在'));
+    }
+    if ((string) $r['status'] !== 'pending') {
+        return array(400, array('error' => '该申请已处理'));
+    }
+    $gid = (int) $r['group_id'];
+    $role = member_role($gid, $uid);
+    if ($role !== 'owner' && $role !== 'admin') {
+        return array(403, array('error' => '只有群主或管理员可以审核'));
+    }
+    $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
+    if (!$g) {
+        return array(404, array('error' => '群聊不存在'));
+    }
+    $applicant = (int) $r['user_id'];
+    if (member_role($gid, $applicant) === null) {
+        db_exec_ignore(
+            'INSERT INTO `group_members` (`group_id`, `user_id`, `role`, `joined_at`) VALUES (?, ?, ?, ?)',
+            array($gid, $applicant, 'member', now_ms())
+        );
+    }
+    db_run(
+        'UPDATE `group_join_requests` SET `status` = ?, `handled_by` = ?, `handled_at` = ? WHERE `id` = ?',
+        array('accepted', $uid, now_ms(), (int) $r['id'])
+    );
+    // 该申请已处理：清掉所有群主/管理员收到的待审核通知，避免其他人再点「同意/拒绝」时提示已处理
+    db_run(
+        'DELETE FROM `notifications` WHERE `ref_type` = ? AND `ref_id` = ?',
+        array('group_join_request', (int) $r['id'])
+    );
+    create_notification(array(
+        'user_id' => $applicant,
+        'type' => 'group_join_accept',
+        'actor_id' => $uid,
+        'text' => '你加入群聊「' . $g['name'] . '」的申请已通过',
+        'ref_type' => 'group',
+        'ref_id' => $gid,
+    ));
+    event_to_user($applicant, 'group:new', array('group' => group_brief($g, $applicant)));
+    event_to_group_members($gid, 'group:members', array('groupId' => $gid, 'group' => group_brief($g, $uid)));
+    return array(200, array('ok' => true));
+});
+
+// 拒绝入群申请（群主 / 管理员）
+route('POST', '#^/api/groups/join-requests/(\d+)/reject$#', function ($params, $body) {
+    $uid = require_auth();
+    $r = db_one('SELECT * FROM `group_join_requests` WHERE `id` = ?', array((int) $params[0]));
+    if (!$r) {
+        return array(404, array('error' => '申请不存在'));
+    }
+    if ((string) $r['status'] !== 'pending') {
+        return array(400, array('error' => '该申请已处理'));
+    }
+    $gid = (int) $r['group_id'];
+    $role = member_role($gid, $uid);
+    if ($role !== 'owner' && $role !== 'admin') {
+        return array(403, array('error' => '只有群主或管理员可以审核'));
+    }
+    $g = db_one('SELECT * FROM `groups` WHERE `id` = ?', array($gid));
+    if (!$g) {
+        return array(404, array('error' => '群聊不存在'));
+    }
+    db_run(
+        'UPDATE `group_join_requests` SET `status` = ?, `handled_by` = ?, `handled_at` = ? WHERE `id` = ?',
+        array('rejected', $uid, now_ms(), (int) $r['id'])
+    );
+    // 该申请已处理：清掉所有群主/管理员收到的待审核通知
+    db_run(
+        'DELETE FROM `notifications` WHERE `ref_type` = ? AND `ref_id` = ?',
+        array('group_join_request', (int) $r['id'])
+    );
+    create_notification(array(
+        'user_id' => (int) $r['user_id'],
+        'type' => 'group_join_reject',
+        'actor_id' => $uid,
+        'text' => '你加入群聊「' . $g['name'] . '」的申请未通过',
+        'ref_type' => 'group',
+        'ref_id' => $gid,
+    ));
+    return array(200, array('ok' => true));
+});
+
 // 删除已解散的群聊（仅移除自己的会话，不再显示在首页；历史消息保留在服务端）
 route('POST', '#^/api/groups/(\d+)/delete-chat$#', function ($params, $body) {
     $uid = require_auth();

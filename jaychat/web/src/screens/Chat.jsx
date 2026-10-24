@@ -691,8 +691,17 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       return n;
     });
   };
-  // 当前会话名称：合并转发时作为「来源聊天」写进记录（群名 / 好友备注）
-  const convName = isGroup ? group?.name || title || '' : peer?.remark || peer?.username || title || '';
+  // 当前会话名称：合并转发时作为「来源聊天」写进记录
+  // 群聊 → 群名称；私聊 → 「我 和 对方 的私聊」
+  const convName = isGroup
+    ? group?.name || title || ''
+    : `${me.username}和${peer?.remark || peer?.username || title || '对方'}的私聊`;
+  // 卡片标题：私聊直接显示「A和B的私聊」，群聊显示「群名 的聊天记录」
+  const fwdSource = (records) => {
+    const from = records?.[0]?.from || '';
+    if (!from) return '聊天记录';
+    return /的私聊$/.test(from) ? from : `${from} 的聊天记录`;
+  };
   const selRecords = () => {
     const sel = multiSel || new Set();
     return messages
@@ -928,7 +937,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
               <div className="fwd-card">
                 <div className="fwd-title">
                   <Icon name="message" size={14} strokeWidth={2} />
-                  <span className="ellipsis">{fwdRecords[0]?.from ? `${fwdRecords[0].from} 的聊天记录` : '聊天记录'}</span>
+                  <span className="ellipsis">{fwdSource(fwdRecords)}</span>
                 </div>
                 {fwdRecords.slice(0, 2).map((it, i) => (
                   <div key={i} className="fwd-line">
@@ -1401,7 +1410,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       <Sheet
         open={!!fwdView}
         onClose={() => setFwdView(null)}
-        title={`${fwdView?.[0]?.from ? fwdView[0].from + ' 的聊天记录' : '聊天记录'}（${fwdView?.length || 0} 条）`}
+        title={`${fwdSource(fwdView)}（${fwdView?.length || 0} 条）`}
       >
         <div style={{ maxHeight: '62vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {(fwdView || []).map((it, i) => (

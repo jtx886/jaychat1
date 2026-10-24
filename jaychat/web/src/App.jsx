@@ -320,7 +320,7 @@ export default function App() {
       case 'notifications':
         return <NotificationsScreen />;
       case 'addFriend':
-        return <AddFriendScreen />;
+        return <AddFriendScreen {...r.params} />;
       case 'createGroup':
         return <CreateGroupScreen />;
       case 'moments':

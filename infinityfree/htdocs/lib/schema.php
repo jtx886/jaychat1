@@ -103,6 +103,20 @@ function jc_schema_tables()
             ),
             'pk' => array('group_id', 'user_id'),
         ),
+        // 入群申请（群主 / 管理员在通知里同意或拒绝）
+        'group_join_requests' => array(
+            'cols' => array(
+                array('id', 'pk', 'auto'),
+                array('group_id', 'int', 'notnull'),
+                array('user_id', 'int', 'notnull'),
+                array('message', 'str:255', 'default:'),
+                // pending | accepted | rejected
+                array('status', 'str:16', 'default:pending'),
+                array('handled_by', 'int', 'default:0'),
+                array('created_at', 'bigint', 'notnull'),
+                array('handled_at', 'bigint', 'default:0'),
+            ),
+        ),
         'messages' => array(
             'cols' => array(
                 array('id', 'pk', 'auto'),
@@ -444,6 +458,8 @@ function jc_schema_indexes($driver)
         'CREATE INDEX ' . $ine . 'idx_events_user ON `events` (`user_id`, `id`)',
         'CREATE INDEX ' . $ine . 'idx_recalled_conv ON `message_recalled` (`conv_type`, `conv_id`, `message_id`)',
         'CREATE INDEX ' . $ine . 'idx_verify_email ON `verify_codes` (`email`)',
+        'CREATE INDEX ' . $ine . 'idx_gjoin_group ON `group_join_requests` (`group_id`, `status`)',
+        'CREATE INDEX ' . $ine . 'idx_gjoin_user ON `group_join_requests` (`user_id`, `status`)',
         'CREATE INDEX ' . $ine . 'idx_ip_last ON `ip_records` (`last_seen`)',
         'CREATE INDEX ' . $ine . 'idx_ip_user ON `ip_records` (`user_id`)',
     );

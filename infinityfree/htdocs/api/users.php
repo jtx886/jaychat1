@@ -77,7 +77,7 @@ function shape_moment($m, $viewer_id)
     );
 }
 
-// 搜索用户（按昵称）
+// 搜索用户（按昵称模糊搜索 + 按用户 ID 精确搜索）
 route('GET', '#^/api/users/search$#', function ($params, $body) {
     $uid = require_auth();
     $q = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
@@ -85,8 +85,8 @@ route('GET', '#^/api/users/search$#', function ($params, $body) {
         return array(200, array('users' => array()));
     }
     $rows = db_all(
-        'SELECT * FROM `users` WHERE `username` LIKE ? AND `id` != ? ORDER BY `is_official` DESC, `id` ASC LIMIT 20',
-        array('%' . $q . '%', $uid)
+        'SELECT * FROM `users` WHERE (`username` LIKE ? OR `id` = ?) AND `id` != ? ORDER BY `is_official` DESC, `id` ASC LIMIT 20',
+        array('%' . $q . '%', (int) $q, $uid)
     );
     $users = array();
     foreach ($rows as $u) {
