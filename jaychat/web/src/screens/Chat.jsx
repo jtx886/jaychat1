@@ -689,17 +689,27 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       return n;
     });
   };
+  // 当前会话名称：合并转发时作为「来源聊天」写进记录（群名 / 好友备注）
+  const convName = isGroup ? group?.name || title || '' : peer?.remark || peer?.username || title || '';
   const selRecords = () => {
     const sel = multiSel || new Set();
     return messages
       .filter((m) => sel.has(m.id) && !m.recalled && !m.burned && !m.one_time)
-      .map((m) => ({
-        name: m.sender_id === me.id ? me.username : m.sender?.username || '用户',
-        msgType: m.msg_type,
-        content: m.msg_type === 'text' ? String(m.content || '').slice(0, 500) : '',
-        mediaUrl: m.media_url || '',
-        createdAt: m.created_at,
-      }));
+      .map((m, i) => {
+        const self = m.sender_id === me.id;
+        const uname = self ? me.username : m.sender?.username || '用户';
+        return {
+          name: uname,
+          uid: self ? me.id : m.sender?.id || 0,
+          avatar: self ? me.avatar || '' : m.sender?.avatar || '',
+          // 来源聊天名只在首条记录里保存一份，避免整包体积膨胀
+          ...(i === 0 && convName ? { from: convName, fromType: convType } : {}),
+          msgType: m.msg_type,
+          content: m.msg_type === 'text' ? String(m.content || '').slice(0, 500) : '',
+          mediaUrl: m.media_url || '',
+          createdAt: m.created_at,
+        };
+      });
   };
   const openFwdPick = async () => {
     const records = selRecords();
@@ -915,7 +925,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
               // 合并转发的聊天记录卡片
               <div className="fwd-card">
                 <div className="fwd-title">
-                  <Icon name="message" size={14} strokeWidth={2} /> 聊天记录（{fwdRecords.length} 条）
+                  <Icon name="message" size={14} strokeWidth={2} />
+                  <span className="ellipsis">{fwdRecords[0]?.from ? `${fwdRecords[0].from} 的聊天记录` : '聊天记录'}</span>
                 </div>
                 {fwdRecords.slice(0, 2).map((it, i) => (
                   <div key={i} className="fwd-line">
@@ -1382,24 +1393,39 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       </Sheet>
 
       {/* 查看合并转发的聊天记录 */}
-      <Sheet open={!!fwdView} onClose={() => setFwdView(null)} title={`聊天记录（${fwdView?.length || 0} 条）`}>
+      <Sheet
+        open={!!fwdView}
+        onClose={() => setFwdView(null)}
+        title={`${fwdView?.[0]?.from ? fwdView[0].from + ' 的聊天记录' : '聊天记录'}（${fwdView?.length || 0} 条）`}
+      >
         <div style={{ maxHeight: '62vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {(fwdView || []).map((it, i) => (
             <div key={i} className="fwd-view-item">
-              <div className="fwd-view-head">
-                <b>{it.name}</b>
-                <span className="hint">{bubbleTime(it.createdAt)}</span>
-              </div>
-              <div className="fwd-view-body">
-                {it.msgType === 'image' && it.mediaUrl ? (
-                  <SmartImage src={it.mediaUrl} alt="" style={{ maxWidth: 180, maxHeight: 180, borderRadius: 10, display: 'block' }} />
-                ) : it.msgType === 'video' && it.mediaUrl ? (
-                  <VideoPlayer src={mediaUrl(it.mediaUrl)} style={{ maxWidth: 200, borderRadius: 10 }} />
-                ) : it.msgType === 'sticker' && it.mediaUrl ? (
-                  <img className="bubble-sticker" src={mediaUrl(it.mediaUrl)} alt="" loading="lazy" />
-                ) : (
-                  <span style={{ whiteSpace: 'pre-wrap' }}>{String(it.content || '') || '[消息]'}</span>
-                )}
+              <Avatar
+                user={{ id: it.uid || -1 - i, username: it.name || '', avatar: it.avatar || '' }}
+                name={it.name}
+                size={30}
+                online={false}
+                style={{ marginTop: 2, flexShrink: 0 }}
+              />
+              <div className="fwd-view-main">
+                <div className="fwd-view-head">
+                  <b className="ellipsis">{it.name}</b>
+                  <span className="hint" style={{ flexShrink: 0, marginLeft: 8 }}>{bubbleTime(it.createdAt)}</span>
+                </div>
+                <div className="fwd-view-body">
+                  {it.msgType === 'image' && it.mediaUrl ? (
+                    <SmartImage src={it.mediaUrl} alt="" style={{ maxWidth: 180, maxHeight: 180, borderRadius: 10, display: 'block' }} />
+                  ) : it.msgType === 'video' && it.mediaUrl ? (
+                    <VideoPlayer src={mediaUrl(it.mediaUrl)} style={{ maxWidth: 200, borderRadius: 10 }} />
+                  ) : it.msgType === 'sticker' && it.mediaUrl ? (
+                    <img className="bubble-sticker" src={mediaUrl(it.mediaUrl)} alt="" loading="lazy" />
+                  ) : (
+                    <span style={{ whiteSpace: 'pre-wrap' }}>
+                      {it.msgType === 'forward' ? '[聊天记录]' : String(it.content || '') || '[消息]'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}

@@ -373,12 +373,14 @@ body {
 .bubble.msg-selected .multi-check { background: var(--brand-grad); border-color: transparent; }
 .fwd-card { min-width: 170px; max-width: 240px; cursor: pointer; }
 .fwd-title { font-weight: 800; font-size: 13.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.fwd-title span { min-width: 0; }
 .fwd-line { font-size: 12px; color: var(--text-2); line-height: 1.55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fwd-line b { color: var(--text-1); font-weight: 700; }
 .fwd-hint { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, .1); font-size: 11px; color: var(--text-3); }
 .multi-select-hint { font-size: 12px; color: var(--text-3); padding: 0 2px 8px; }
-.fwd-view-item { padding: 10px 2px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.fwd-view-item { display: flex; gap: 9px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
 .fwd-view-item:last-child { border-bottom: none; }
+.fwd-view-main { flex: 1; min-width: 0; }
 .fwd-view-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
 .fwd-view-body { font-size: 13.5px; line-height: 1.6; }
 .one-time-tag {
