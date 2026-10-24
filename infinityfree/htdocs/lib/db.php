@@ -249,6 +249,8 @@ function db_install()
                 db_ensure_column('moment_comments', 'msg_type', "`msg_type` VARCHAR(16) DEFAULT 'text'");
                 db_ensure_column('moment_comments', 'media_url', '`media_url` VARCHAR(1000) DEFAULT ""');
                 db_ensure_column('moment_comments', 'media_thumb', '`media_thumb` VARCHAR(1000) DEFAULT ""');
+                // v10：合并转发需要大容量 content
+                db()->exec('ALTER TABLE `messages` MODIFY `content` TEXT');
             }
         } catch (Exception $e) {
         }

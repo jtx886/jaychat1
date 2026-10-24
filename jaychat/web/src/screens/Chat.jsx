@@ -47,6 +47,15 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const [oneTime, setOneTime] = useState(false);
   const [oneTimeSec, setOneTimeSec] = useState('5');
   const [sending, setSending] = useState(false);
+  // 多选模式：null=未开启；Set=已选中的消息 id 集合
+  const [multiSel, setMultiSel] = useState(null);
+  // 合并转发目标选择：null=关闭；{ records }=待转发的消息
+  const [fwdPick, setFwdPick] = useState(null);
+  const [fwdFriends, setFwdFriends] = useState([]);
+  const [fwdBusy, setFwdBusy] = useState(false);
+  // 合并转发记录查看：null=关闭；数组=要展示的聊天记录
+  const [fwdView, setFwdView] = useState(null);
+  const [myRole, setMyRole] = useState('member');
   const scrollRef = useRef(null);
   const textRef = useRef('');
   const inputRef = useRef(null);
@@ -106,6 +115,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         setMembers(g.members || []);
         setGroup(g.group);
         setDnd(!!g.group?.dnd);
+        setMyRole(g.my_role || 'member');
       } else {
         api.get(`/api/users/${peerId}`).then((u) => setPeer(u.user)).catch(() => {});
         // 进入会话立即拉一次对方在线状态（不等 App 层 30s 轮询）
@@ -650,7 +660,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   /* ---------- 撤回 / 复制 / 删除（本地） ---------- */
-  const canRecall = (m) => m.sender_id === me.id && !m.recalled && Date.now() - m.created_at <= RECALL_WINDOW;
+  // 撤回权限：本人 3 分钟内；群主可撤回群内任何成员的消息（不限时）
+  const canRecall = (m) => {
+    if (m.recalled) return false;
+    if (m.sender_id === me.id) return Date.now() - m.created_at <= RECALL_WINDOW;
+    if (isGroup && myRole === 'owner' && m.sender_id !== 0) return true;
+    return false;
+  };
 
   const doRecall = async (m) => {
     try {
@@ -660,6 +676,88 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       toast(e.message, 'error');
     }
   };
+
+  /* ---------- 多选 / 合并转发 / 批量删除 ---------- */
+  const multiActive = multiSel !== null;
+  const selCount = multiSel ? multiSel.size : 0;
+  const toggleSel = (id) => {
+    setMultiSel((s) => {
+      if (!s) return s;
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+  const selRecords = () => {
+    const sel = multiSel || new Set();
+    return messages
+      .filter((m) => sel.has(m.id) && !m.recalled && !m.burned && !m.one_time)
+      .map((m) => ({
+        name: m.sender_id === me.id ? me.username : m.sender?.username || '用户',
+        msgType: m.msg_type,
+        content: m.msg_type === 'text' ? String(m.content || '').slice(0, 500) : '',
+        mediaUrl: m.media_url || '',
+        createdAt: m.created_at,
+      }));
+  };
+  const openFwdPick = async () => {
+    const records = selRecords();
+    if (!records.length) return toast('请选择要转发的消息', 'error');
+    setFwdPick({ records });
+    try {
+      const d = await api.get('/api/friends');
+      setFwdFriends(d.friends || []);
+    } catch {
+      setFwdFriends([]);
+    }
+  };
+  const doForwardTo = async (convType, convId, name) => {
+    if (!fwdPick || fwdBusy) return;
+    setFwdBusy(true);
+    try {
+      await api.post('/api/messages', {
+        convType, convId,
+        msg_type: 'forward',
+        content: JSON.stringify(fwdPick.records),
+      });
+      toast(`已转发给 ${name}`);
+      setFwdPick(null);
+      setMultiSel(null);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setFwdBusy(false);
+    }
+  };
+  const doMultiDelete = async () => {
+    if (!multiSel || !multiSel.size) return;
+    try {
+      await api.post('/api/messages/hide', { ids: [...multiSel] });
+      setMessages((list) => list.filter((x) => !multiSel.has(x.id)));
+      toast(`已删除 ${multiSel.size} 条消息`);
+      setMultiSel(null);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+  const parseForward = (content) => {
+    try {
+      const arr = JSON.parse(content);
+      return Array.isArray(arr) ? arr : null;
+    } catch {
+      return null;
+    }
+  };
+  const fwdSummary = (item) => {
+    if (item.msgType === 'image') return '[图片]';
+    if (item.msgType === 'video') return '[视频]';
+    if (item.msgType === 'sticker') return '[动画表情]';
+    if (item.msgType === 'forward') return '[聊天记录]';
+    return String(item.content || '').slice(0, 60) || '[消息]';
+  };
+  // 私聊会话 id：两个用户 id 升序拼接（与后端 dm_conv_id 一致）
+  const dmConvId = (a, b) => (Number(a) < Number(b) ? `${a}_${b}` : `${b}_${a}`);
 
   const doDeleteFriend = async () => {
     try {
@@ -730,7 +828,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     const isMedia = m.msg_type === 'image' || m.msg_type === 'video' || m.msg_type === 'sticker';
     const plain = isMedia && !quote && !m.recalled && !m.burned;
     const bubbleClass =
-      'bubble' + (isAI ? ' bubble-ai' : '') + (plain ? ' plain' : '') + (m.recalled ? ' recalled' : '');
+      'bubble' + (isAI ? ' bubble-ai' : '') + (plain ? ' plain' : '') + (m.recalled ? ' recalled' : '')
+      + (multiSel?.has(m.id) ? ' msg-selected' : '');
+    const fwdRecords = m.msg_type === 'forward' && !m.recalled ? parseForward(m.content) : null;
 
     return (
       <div
@@ -738,7 +838,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         ref={(el) => {
           if (el) rowRefs.current[m.id] = el;
         }}
-        className={'msg-row' + (mine ? ' mine' : '')}
+        className={'msg-row' + (mine ? ' mine' : '') + (multiActive ? ' multi' : '')}
       >
         <span
           className={canAt ? 'avatar-at' : undefined}
@@ -767,23 +867,38 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             className={bubbleClass}
             onContextMenu={(e) => {
               e.preventDefault();
-              if (m.recalled) return;
+              if (multiActive || m.recalled) return;
               setActionMsg(m);
             }}
             onClick={() => {
+              // 多选模式：点击切换选中，不打开媒体
+              if (multiActive) {
+                if (m.recalled) return;
+                toggleSel(m.id);
+                return;
+              }
+              if (m.msg_type === 'forward' && fwdRecords) {
+                setFwdView(fwdRecords);
+                return;
+              }
               if (m.msg_type === 'image' || m.msg_type === 'video') {
                 if (m.one_time && !mine && !m.burned) return;
                 setViewer({ url: m.media_url, type: m.msg_type, messageId: m.id });
               }
             }}
             onTouchStart={(e) => {
-              if (m.recalled) return;
+              if (multiActive || m.recalled) return;
               const t = setTimeout(() => setActionMsg(m), 480);
               e.currentTarget._lp = t;
             }}
             onTouchEnd={(e) => clearTimeout(e.currentTarget._lp)}
             onTouchMove={(e) => clearTimeout(e.currentTarget._lp)}
           >
+            {multiActive ? (
+              <span className="multi-check" aria-hidden="true">
+                {multiSel?.has(m.id) ? <Icon name="check" size={12} strokeWidth={3} color="#fff" /> : null}
+              </span>
+            ) : null}
             {quote && !m.recalled ? (
               <div className="quote" onClick={(e) => e.stopPropagation()}>
                 <span className="quote-name">{quote.name}</span>
@@ -796,6 +911,19 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
               <span className="dim" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 <Icon name="flame" size={14} filled color="#ffb020" /> 已销毁
               </span>
+            ) : m.msg_type === 'forward' && fwdRecords ? (
+              // 合并转发的聊天记录卡片
+              <div className="fwd-card">
+                <div className="fwd-title">
+                  <Icon name="message" size={14} strokeWidth={2} /> 聊天记录（{fwdRecords.length} 条）
+                </div>
+                {fwdRecords.slice(0, 2).map((it, i) => (
+                  <div key={i} className="fwd-line">
+                    <b>{it.name}</b><span>：{fwdSummary(it)}</span>
+                  </div>
+                ))}
+                <div className="fwd-hint">点击查看</div>
+              </div>
             ) : m.msg_type === 'image' || m.msg_type === 'video' ? (
               <div className="bubble-media">
                 {m.one_time && !mine ? (
@@ -856,7 +984,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             {group?.is_official ? <span className="badge-soft">官方</span> : null}
           </>
         }
-        sub={loading ? '加载中…' : headerSub}
+        sub={multiActive ? '点选聊天记录进行勾选' : loading ? '加载中…' : headerSub}
         onBack={back}
         right={
           <div className="flex gap8">
@@ -908,7 +1036,27 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         </div>
       ) : null}
 
-      {dissolved ? (
+      {multiActive ? (
+        /* 多选模式操作栏：合并转发 / 删除 / 全选 / 取消 */
+        <div className="multi-bar">
+          <button className="btn btn-sm" onClick={() => setMultiSel(null)}>取消</button>
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              const all = messages.filter((m) => !m.recalled && !m.burned);
+              const allSel = all.length && all.every((m) => multiSel.has(m.id));
+              setMultiSel(allSel ? new Set() : new Set(all.map((m) => m.id)));
+            }}
+          >
+            全选
+          </button>
+          <div className="grow center dim" style={{ fontWeight: 700 }}>已选 {selCount} 条</div>
+          <button className="btn btn-sm" disabled={!selCount} onClick={openFwdPick}>
+            <Icon name="send" size={14} strokeWidth={2} /> 合并转发
+          </button>
+          <button className="btn btn-sm btn-danger" disabled={!selCount} onClick={doMultiDelete}>删除</button>
+        </div>
+      ) : dissolved ? (
         <div className="chat-dissolved-bar">
           <div className="chat-dissolved-text">
             <Icon name="bellOff" size={16} strokeWidth={1.9} /> 该群聊已解散
@@ -1169,7 +1317,14 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                 ...(!actionMsg.recalled
                   ? [{ icon: <IconTile name="reply" tone="mint" box={34} size={18} />, label: '回复', onClick: () => setReplyMsg(actionMsg) }]
                   : []),
-                ...(canRecall(actionMsg) ? [{ icon: <IconTile name="clock" tone="amber" box={34} size={18} />, label: '撤回（3 分钟内）', onClick: () => doRecall(actionMsg) }] : []),
+                ...(canRecall(actionMsg)
+                  ? [{
+                      icon: <IconTile name="clock" tone="amber" box={34} size={18} />,
+                      label: actionMsg.sender_id === me.id ? '撤回（3 分钟内）' : '撤回该成员消息',
+                      onClick: () => doRecall(actionMsg),
+                    }]
+                  : []),
+                { icon: <IconTile name="check" tone="sky" box={34} size={18} />, label: '多选', onClick: () => { setPanel(null); setMultiSel(new Set([actionMsg.id])); } },
                 ...((actionMsg.msg_type === 'text' || actionMsg.msg_type === 'sticker') && !actionMsg.recalled
                   ? [{ icon: <IconTile name="copy" tone="sky" box={34} size={18} />, label: '复制', onClick: () => doCopy(actionMsg) }]
                   : []),
@@ -1186,6 +1341,70 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             : []
         }
       />
+
+      {/* 合并转发：选择好友或群聊 */}
+      <Sheet open={!!fwdPick} onClose={() => (fwdBusy ? null : setFwdPick(null))} title={`合并转发 ${selCount} 条聊天记录`}>
+        <div className="multi-select-hint">选择要发送给的好友或群聊</div>
+        <div className="page-scroll" style={{ maxHeight: '52vh' }}>
+          {(app.conversations.filter((c) => c.conv_type === 'group' && !c.dissolved) || []).length ? (
+            <>
+              <div className="section-head" style={{ padding: '4px 2px 6px' }}>我的群聊</div>
+              <div className="list">
+                {app.conversations
+                  .filter((c) => c.conv_type === 'group' && !c.dissolved)
+                  .map((c) => (
+                    <div key={c.key} className="list-item" onClick={() => doForwardTo('group', c.conv_id, c.name)}>
+                      <Avatar user={{ id: 0, username: c.name, avatar: c.avatar }} name={c.name} size={40} />
+                      <div className="list-main"><div className="list-title">{c.name}</div></div>
+                      <span className="chev dim">›</span>
+                    </div>
+                  ))}
+              </div>
+            </>
+          ) : null}
+          {fwdFriends.length ? (
+            <>
+              <div className="section-head" style={{ padding: '4px 2px 6px' }}>好友</div>
+              <div className="list">
+                {fwdFriends.map((f) => (
+                  <div key={f.id} className="list-item" onClick={() => doForwardTo('dm', dmConvId(me.id, f.id), f.remark || f.username)}>
+                    <Avatar user={f} size={40} />
+                    <div className="list-main"><div className="list-title">{f.remark || f.username}</div></div>
+                    <span className="chev dim">›</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="hint center" style={{ padding: 16 }}>还没有可发送的好友或群聊</div>
+          )}
+        </div>
+      </Sheet>
+
+      {/* 查看合并转发的聊天记录 */}
+      <Sheet open={!!fwdView} onClose={() => setFwdView(null)} title={`聊天记录（${fwdView?.length || 0} 条）`}>
+        <div className="page-scroll" style={{ maxHeight: '62vh' }}>
+          {(fwdView || []).map((it, i) => (
+            <div key={i} className="fwd-view-item">
+              <div className="fwd-view-head">
+                <b>{it.name}</b>
+                <span className="hint">{bubbleTime(it.createdAt)}</span>
+              </div>
+              <div className="fwd-view-body">
+                {it.msgType === 'image' && it.mediaUrl ? (
+                  <SmartImage src={it.mediaUrl} alt="" style={{ maxWidth: 180, maxHeight: 180, borderRadius: 10, display: 'block' }} />
+                ) : it.msgType === 'video' && it.mediaUrl ? (
+                  <VideoPlayer src={mediaUrl(it.mediaUrl)} style={{ maxWidth: 200, borderRadius: 10 }} />
+                ) : it.msgType === 'sticker' && it.mediaUrl ? (
+                  <img className="bubble-sticker" src={mediaUrl(it.mediaUrl)} alt="" loading="lazy" />
+                ) : (
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{String(it.content || '') || '[消息]'}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Sheet>
 
       {/* 相关表情 */}
       <Sheet

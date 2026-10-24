@@ -154,5 +154,6 @@ function jc_schema_version()
     // v7：群聊支持解散（新增 dissolved 标记，解散后保留会话与历史消息、禁止发言）
     // v8：安全加固（用户 IP 记录、IP 黑名单、接口限流表）
     // v9：头像列扩容（预设头像 data URI 超过 255 字符）+ 头像文件备份表（升级后自动恢复）
-    return 9;
+    // v10：群主可撤回群员消息（不限时）；聊天记录多选/合并转发（messages.content 扩为 TEXT、新增 message_hides 隐藏表）
+    return 10;
 }

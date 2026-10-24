@@ -269,6 +269,8 @@ body {
   box-shadow: 0 4px 12px rgba(255, 95, 122, .5);
 }
 .badge-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 12px rgba(255, 95, 122, .9); }
+/* 免打扰会话的未读提示：灰色小圆点（像 QQ），不显示数字 */
+.badge-muted { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, .38); box-shadow: none; }
 .badge-soft { background: rgba(255, 255, 255, .1); color: var(--text-2); font-size: 11px; padding: 2px 8px; border-radius: 8px; box-shadow: none; font-weight: 700; }
 .badge-gold { background: rgba(255, 184, 77, .16); color: #ffcd7a; font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 700; }
 .tag-online { font-size: 11px; color: var(--ok); display: inline-flex; align-items: center; gap: 4px; font-weight: 700; }
@@ -353,6 +355,32 @@ body {
   font-size: 12.5px; font-weight: 700; color: var(--text-2);
   background: rgba(255, 255, 255, .05); border: 1px dashed rgba(255, 255, 255, .18); border-radius: 14px;
 }
+
+/* ---------------------------- 多选 / 合并转发 ---------------------------- */
+.multi-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px calc(8px + var(--safe-b));
+  border-top: 1px solid rgba(255, 255, 255, .07);
+  background: rgba(10, 13, 28, 0.86); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+}
+.msg-row.multi .bubble { cursor: pointer; }
+.multi-check {
+  width: 18px; height: 18px; min-width: 18px; border-radius: 50%;
+  border: 1.6px solid rgba(255, 255, 255, .4); background: rgba(0, 0, 0, .2);
+  display: inline-flex; align-items: center; justify-content: center; margin-right: 8px;
+}
+.bubble.msg-selected { outline: 2px solid var(--brand-2); outline-offset: 1px; border-radius: 16px; }
+.bubble.msg-selected .multi-check { background: var(--brand-grad); border-color: transparent; }
+.fwd-card { min-width: 170px; max-width: 240px; cursor: pointer; }
+.fwd-title { font-weight: 800; font-size: 13.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.fwd-line { font-size: 12px; color: var(--text-2); line-height: 1.55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fwd-line b { color: var(--text-1); font-weight: 700; }
+.fwd-hint { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, .1); font-size: 11px; color: var(--text-3); }
+.multi-select-hint { font-size: 12px; color: var(--text-3); padding: 0 2px 8px; }
+.fwd-view-item { padding: 10px 2px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.fwd-view-item:last-child { border-bottom: none; }
+.fwd-view-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
+.fwd-view-body { font-size: 13.5px; line-height: 1.6; }
 .one-time-tag {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800;
   color: #ffd479; background: rgba(255, 184, 77, .16); border: 1px solid rgba(255, 184, 77, .36);

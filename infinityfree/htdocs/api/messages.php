@@ -5,11 +5,18 @@
 
 const JC_RECALL_WINDOW = 180000; // 3 分钟
 
-function last_message($conv_type, $conv_id)
+function last_message($conv_type, $conv_id, $viewer_uid = 0)
 {
+    $hideSql = '';
+    $params = array($conv_type, (string) $conv_id);
+    if ($viewer_uid > 0) {
+        // 自己「删除」过的消息不再出现在会话预览里
+        $hideSql = ' AND `id` NOT IN (SELECT `message_id` FROM `message_hides` WHERE `user_id` = ?)';
+        $params[] = (int) $viewer_uid;
+    }
     return db_one(
-        'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `recalled` = 0 ORDER BY `id` DESC LIMIT 1',
-        array($conv_type, (string) $conv_id)
+        'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `recalled` = 0' . $hideSql . ' ORDER BY `id` DESC LIMIT 1',
+        $params
     );
 }
 
@@ -22,8 +29,9 @@ function unread_count($conv_type, $conv_id, $uid)
 {
     $rows = db_all(
         'SELECT `id`, `one_time` FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `sender_id` != ? AND `recalled` = 0
-         AND `id` NOT IN (SELECT `message_id` FROM `message_reads` WHERE `user_id` = ?)',
-        array($conv_type, (string) $conv_id, (int) $uid, (int) $uid)
+         AND `id` NOT IN (SELECT `message_id` FROM `message_reads` WHERE `user_id` = ?)
+         AND `id` NOT IN (SELECT `message_id` FROM `message_hides` WHERE `user_id` = ?)',
+        array($conv_type, (string) $conv_id, (int) $uid, (int) $uid, (int) $uid)
     );
     $n = 0;
     foreach ($rows as $r) {
@@ -44,6 +52,10 @@ function preview_of($m)
         $text = '[视频]';
     } elseif ($m['msg_type'] === 'sticker') {
         $text = '[动画表情]';
+    } elseif ($m['msg_type'] === 'forward') {
+        $fj = safe_json($m['content']);
+        $n = is_array($fj) ? count($fj) : 0;
+        $text = $n > 0 ? ('[聊天记录] ' . $n . ' 条消息') : '[聊天记录]';
     }
     if (!empty($m['one_time'])) {
         $text = '[一次性消息]';
@@ -535,7 +547,7 @@ route('GET', '#^/api/conversations$#', function ($params, $body) {
     $groups = db_all('SELECT g.*, m.`dnd` FROM `group_members` m JOIN `groups` g ON g.`id` = m.`group_id` WHERE m.`user_id` = ?', array($uid));
     foreach ($groups as $g) {
         $cid = (string) $g['id'];
-        $lm = last_message('group', $cid);
+        $lm = last_message('group', $cid, $uid);
         $members = group_members($g['id']);
         $online = 0;
         foreach ($members as $m) {
@@ -573,7 +585,7 @@ route('GET', '#^/api/conversations$#', function ($params, $body) {
         }
         $cid = dm_conv_id($uid, $f['id']);
         $seen[$cid] = true;
-        $lm = last_message('dm', $cid);
+        $lm = last_message('dm', $cid, $uid);
         $dndRow = db_one('SELECT `dnd` FROM `dm_dnd` WHERE `user_id` = ? AND `peer_id` = ?', array($uid, (int) $f['id']));
         $list[] = array(
             'key' => 'dm_' . $cid,
@@ -618,7 +630,7 @@ route('GET', '#^/api/conversations$#', function ($params, $body) {
         if (!$peer) {
             continue;
         }
-        $lm = last_message('dm', $convId);
+        $lm = last_message('dm', $convId, $uid);
         $list[] = array(
             'key' => 'dm_' . $convId,
             'conv_type' => 'dm',
@@ -704,13 +716,17 @@ route('GET', '#^/api/messages$#', function ($params, $body) {
     }
     if ($before) {
         $rows = db_all(
-            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `id` < ? ORDER BY `id` DESC LIMIT ' . (int) $limit,
-            array($convType, $convId, $before)
+            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `id` < ?
+             AND `id` NOT IN (SELECT `message_id` FROM `message_hides` WHERE `user_id` = ?)
+             ORDER BY `id` DESC LIMIT ' . (int) $limit,
+            array($convType, $convId, $before, $uid)
         );
     } else {
         $rows = db_all(
-            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? ORDER BY `id` DESC LIMIT ' . (int) $limit,
-            array($convType, $convId)
+            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ?
+             AND `id` NOT IN (SELECT `message_id` FROM `message_hides` WHERE `user_id` = ?)
+             ORDER BY `id` DESC LIMIT ' . (int) $limit,
+            array($convType, $convId, $uid)
         );
     }
     $rows = array_reverse($rows);
@@ -790,7 +806,19 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
     if ($msgType === 'sticker' && trim((string) $content) === '' && !$mediaUrl) {
         return array(400, array('error' => '表情不能为空'));
     }
-    if ($msgType !== 'text' && $msgType !== 'sticker' && !$mediaUrl) {
+    // 合并转发的聊天记录：content 是 JSON 数组（每条含 senderName/msg_type/content/media_url/created_at）
+    if ($msgType === 'forward') {
+        $fj = json_decode((string) $content, true);
+        if (!is_array($fj) || empty($fj)) {
+            return array(400, array('error' => '聊天记录内容不合法'));
+        }
+        if (count($fj) > 50) {
+            return array(400, array('error' => '单次最多合并转发 50 条消息'));
+        }
+        if (strlen((string) $content) > 60000) {
+            return array(400, array('error' => '聊天记录过大，请减少选择条数'));
+        }
+    } elseif ($msgType !== 'text' && $msgType !== 'sticker' && !$mediaUrl) {
         return array(400, array('error' => '缺少媒体文件'));
     }
 
@@ -846,7 +874,8 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
             (string) $convId,
             $uid,
             (string) $msgType,
-            mb_substr((string) $content, 0, 2000, 'UTF-8'),
+            // 合并转发是序列化 JSON，放宽到 60000；普通消息仍截断 2000
+            mb_substr((string) $content, 0, $msgType === 'forward' ? 60000 : 2000, 'UTF-8'),
             (string) $mediaUrl,
             (string) $mediaThumb,
             $oneTime ? 1 : 0,
@@ -893,10 +922,18 @@ route('POST', '#^/api/messages/(\d+)/recall$#', function ($params, $body) {
     if (!$m) {
         return array(404, array('error' => '消息不存在'));
     }
-    if ((int) $m['sender_id'] !== (int) $uid) {
+    $senderSelf = (int) $m['sender_id'] === (int) $uid;
+    // 群主可以撤回群内任何成员的消息，且不受 3 分钟限制
+    $ownerOverride = false;
+    if (!$senderSelf && (string) $m['conv_type'] === 'group' && (int) $m['sender_id'] !== 0) {
+        if (member_role((int) $m['conv_id'], $uid) === 'owner') {
+            $ownerOverride = true;
+        }
+    }
+    if (!$senderSelf && !$ownerOverride) {
         return array(403, array('error' => '只能撤回自己发送的消息'));
     }
-    if (now_ms() - (int) $m['created_at'] > JC_RECALL_WINDOW) {
+    if (!$ownerOverride && now_ms() - (int) $m['created_at'] > JC_RECALL_WINDOW) {
         return array(400, array('error' => '超过 3 分钟的消息不能撤回'));
     }
     // 原文留档（仅管理员后台「聊天记录」可查看，普通客户端仍只看到「该消息已撤回」）
@@ -925,6 +962,39 @@ route('POST', '#^/api/messages/(\d+)/recall$#', function ($params, $body) {
         'senderId' => (int) $m['sender_id'],
     ));
     return array(200, array('ok' => true));
+});
+
+/* --------------------------- 多选删除（仅隐藏自己的视图） --------------------------- */
+
+route('POST', '#^/api/messages/hide$#', function ($params, $body) {
+    $uid = require_auth();
+    $ids = array();
+    if (isset($body['ids']) && is_array($body['ids'])) {
+        foreach ($body['ids'] as $v) {
+            $n = (int) $v;
+            if ($n > 0) {
+                $ids[] = $n;
+            }
+        }
+    }
+    $ids = array_values(array_unique($ids));
+    if (empty($ids)) {
+        return array(400, array('error' => '未选择消息'));
+    }
+    if (count($ids) > 100) {
+        return array(400, array('error' => '一次最多删除 100 条'));
+    }
+    // 只允许隐藏自己有权访问的会话里的消息
+    foreach ($ids as $id) {
+        $m = db_one('SELECT `conv_type`, `conv_id` FROM `messages` WHERE `id` = ?', array($id));
+        if ($m && check_access($uid, $m['conv_type'], $m['conv_id'])) {
+            db_exec_ignore(
+                'INSERT INTO `message_hides` (`message_id`, `user_id`, `hidden_at`) VALUES (?, ?, ?)',
+                array($id, $uid, now_ms())
+            );
+        }
+    }
+    return array(200, array('ok' => true, 'count' => count($ids)));
 });
 
 /* ---------------------------- 一次性查看销毁 ---------------------------- */

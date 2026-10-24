@@ -110,7 +110,8 @@ function jc_schema_tables()
                 array('conv_id', 'str:100', 'notnull'),
                 array('sender_id', 'int', 'notnull'),
                 array('msg_type', 'str:16', 'default:text'),
-                array('content', 'str:2000', 'default:'),
+                // 合并转发的聊天记录以 JSON 存放，VARCHAR(2000) 不够，扩为 TEXT
+                array('content', 'text', 'default:'),
                 array('media_url', 'str:1000', 'default:'),
                 array('media_thumb', 'str:1000', 'default:'),
                 array('one_time', 'int', 'default:0'),
@@ -127,6 +128,15 @@ function jc_schema_tables()
                 array('read_at', 'bigint', 'notnull'),
             ),
             'pk' => array('message_id', 'user_id'),
+        ),
+        // 「删除」聊天记录：仅从自己的视图隐藏，不影响对方（等价微信/QQ 的删除）
+        'message_hides' => array(
+            'cols' => array(
+                array('message_id', 'int', 'notnull'),
+                array('user_id', 'int', 'notnull'),
+                array('hidden_at', 'bigint', 'notnull'),
+            ),
+            'pk' => array('user_id', 'message_id'),
         ),
         // 撤回消息原文留存（仅管理员后台「聊天记录」可查看；对普通客户端不下发）
         'message_recalled' => array(

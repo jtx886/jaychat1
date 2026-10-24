@@ -142,7 +142,14 @@ export default function HomeScreen() {
               </div>
               <div className="list-meta">
                 <span className="hint">{shortTime(c.last_time)}</span>
-                {c.unread > 0 ? <span className="badge">{c.unread > 99 ? '99+' : c.unread}</span> : null}
+                {c.unread > 0 ? (
+                  // 免打扰会话像 QQ：只显示灰点，不显示红色数字
+                  c.dnd ? (
+                    <span className="badge-muted" title="免打扰" />
+                  ) : (
+                    <span className="badge">{c.unread > 99 ? '99+' : c.unread}</span>
+                  )
+                ) : null}
               </div>
             </div>
           ))}
