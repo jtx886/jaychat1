@@ -374,9 +374,9 @@ function jc_file_mime($file, $fallback = 'application/octet-stream')
  * 这样即使升级部署包覆盖或清空了 uploads 目录、或主机清理文件，
  * 头像 / 动态图片 / 视频也能自动恢复，不需要用户重新上传。
  *
- * 备份是「尽力而为」：体积超过上限或数据库写入失败时静默跳过，不影响上传本身。
+ * 备份是「尽力而为」：体积超过上限（4MB，防止大视频撑爆共享数据库）或数据库写入失败时静默跳过，不影响上传本身。
  */
-function jc_file_backup($url, $maxBytes = 8388608)
+function jc_file_backup($url, $maxBytes = 4194304)
 {
     $url = (string) $url;
     if ($url === '' || strpos($url, '/uploads/') !== 0 || strpos($url, '..') !== false) {

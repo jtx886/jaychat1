@@ -139,13 +139,24 @@ function db_ensure_column($table, $column, $ddl)
 /** 检查数据表是否存在（用于建表自愈） */
 function db_table_exists($table)
 {
-    $driver = jc_config('DB_DRIVER');
-    if ($driver === 'sqlite') {
-        $r = db_one("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", array($table));
-        return $r !== null;
+    // 任何异常一律按「不存在」处理；绝不能让检查本身抛错，
+    // 否则每个请求都会重跑全套建表 DDL，把数据库轰垮（v1.2.4 的崩溃教训）。
+    try {
+        $driver = jc_config('DB_DRIVER');
+        if ($driver === 'sqlite') {
+            return db_one("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", array($table)) !== null;
+        }
+        // information_schema 标准查询：占位符在 MySQL 原生预处理下 100% 可用
+        // （SHOW TABLES LIKE ? 在部分驱动/版本下不可靠）
+        return db_one(
+            'SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
+            array($table)
+        ) !== null;
+    } catch (Exception $e) {
+        return false;
+    } catch (Throwable $e) {
+        return false;
     }
-    $r = db_one('SHOW TABLES LIKE ?', array($table));
-    return $r !== null;
 }
 
 /** 首次请求自检：表/索引/列缺失则自动创建（与 database/schema.sql 等价） */
@@ -171,6 +182,13 @@ function db_install()
         $need = true;
     } catch (Throwable $e) {
         $need = true;
+    }
+
+    // 建表冷却：若上次建表尝试失败（主机拒绝 DDL 等），5 分钟内不再重试。
+    // 否则每个请求都会重跑几十条 DDL，数据库会被轰垮（v1.2.4 崩溃事故的教训）。
+    $coolFile = (sys_get_temp_dir() ?: '/tmp') . '/jc_schema_cool_' . md5(__DIR__);
+    if ($need && is_file($coolFile) && (int) @filemtime($coolFile) > time() - 300) {
+        $need = false;
     }
 
     if ($need) {
@@ -255,15 +273,21 @@ function db_install()
             }
         }
 
-        // 写入版本标记
-        try {
-            $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('schema_version'));
-            if ($row === null) {
-                db_run('INSERT INTO `jc_meta` (`name`, `value`) VALUES (?, ?)', array('schema_version', $version));
-            } else {
-                db_run('UPDATE `jc_meta` SET `value` = ? WHERE `name` = ?', array($version, 'schema_version'));
+        // 只有确认关键表真正建成才推进版本号；
+        // 若建表仍被主机拒绝，则记录冷却，5 分钟内不再重试，保护数据库。
+        if (db_table_exists('avatar_files') && db_table_exists('jc_meta')) {
+            try {
+                $row = db_one('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('schema_version'));
+                if ($row === null) {
+                    db_run('INSERT INTO `jc_meta` (`name`, `value`) VALUES (?, ?)', array('schema_version', $version));
+                } else {
+                    db_run('UPDATE `jc_meta` SET `value` = ? WHERE `name` = ?', array($version, 'schema_version'));
+                }
+            } catch (Exception $e) {
             }
-        } catch (Exception $e) {
+            @unlink($coolFile);
+        } else {
+            @touch($coolFile);
         }
     }
 

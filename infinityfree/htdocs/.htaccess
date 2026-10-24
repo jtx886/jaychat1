@@ -14,8 +14,9 @@
 </IfModule>
 
 # 文本类响应开启 gzip：主 JS 约 570KB → 250KB，免费主机带宽小，首屏提速明显
+# 注意：不对 application/json 压缩——长轮询是挂起的流式请求，输出过滤器会缓冲它
 <IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/x-javascript application/json application/xml image/svg+xml
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/x-javascript application/xml image/svg+xml
 </IfModule>
 
 # 带 hash 的构建产物长缓存：二次访问不再重新下载，秒开
