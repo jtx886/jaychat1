@@ -1345,7 +1345,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       {/* 合并转发：选择好友或群聊 */}
       <Sheet open={!!fwdPick} onClose={() => (fwdBusy ? null : setFwdPick(null))} title={`合并转发 ${selCount} 条聊天记录`}>
         <div className="multi-select-hint">选择要发送给的好友或群聊</div>
-        <div className="page-scroll" style={{ maxHeight: '52vh' }}>
+        <div style={{ maxHeight: '52vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {(app.conversations.filter((c) => c.conv_type === 'group' && !c.dissolved) || []).length ? (
             <>
               <div className="section-head" style={{ padding: '4px 2px 6px' }}>我的群聊</div>
@@ -1383,7 +1383,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
 
       {/* 查看合并转发的聊天记录 */}
       <Sheet open={!!fwdView} onClose={() => setFwdView(null)} title={`聊天记录（${fwdView?.length || 0} 条）`}>
-        <div className="page-scroll" style={{ maxHeight: '62vh' }}>
+        <div style={{ maxHeight: '62vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {(fwdView || []).map((it, i) => (
             <div key={i} className="fwd-view-item">
               <div className="fwd-view-head">
