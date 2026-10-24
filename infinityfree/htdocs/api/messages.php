@@ -923,17 +923,13 @@ route('POST', '#^/api/messages/(\d+)/recall$#', function ($params, $body) {
         return array(404, array('error' => '消息不存在'));
     }
     $senderSelf = (int) $m['sender_id'] === (int) $uid;
-    // 群主可以撤回群内任何成员的消息，且不受 3 分钟限制
-    $ownerOverride = false;
-    if (!$senderSelf && (string) $m['conv_type'] === 'group' && (int) $m['sender_id'] !== 0) {
-        if (member_role((int) $m['conv_id'], $uid) === 'owner') {
-            $ownerOverride = true;
-        }
-    }
-    if (!$senderSelf && !$ownerOverride) {
+    // 群主撤回群内消息（自己的或群员的）都不受 3 分钟限制；私聊和普通成员仍有 3 分钟限制
+    $isGroupMsg = (string) $m['conv_type'] === 'group';
+    $isOwner = $isGroupMsg ? member_role((int) $m['conv_id'], $uid) === 'owner' : false;
+    if (!$senderSelf && !($isOwner && (int) $m['sender_id'] !== 0)) {
         return array(403, array('error' => '只能撤回自己发送的消息'));
     }
-    if (!$ownerOverride && now_ms() - (int) $m['created_at'] > JC_RECALL_WINDOW) {
+    if (!$isOwner && now_ms() - (int) $m['created_at'] > JC_RECALL_WINDOW) {
         return array(400, array('error' => '超过 3 分钟的消息不能撤回'));
     }
     // 原文留档（仅管理员后台「聊天记录」可查看，普通客户端仍只看到「该消息已撤回」）

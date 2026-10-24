@@ -663,8 +663,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   // 撤回权限：本人 3 分钟内；群主可撤回群内任何成员的消息（不限时）
   const canRecall = (m) => {
     if (m.recalled) return false;
-    if (m.sender_id === me.id) return Date.now() - m.created_at <= RECALL_WINDOW;
-    if (isGroup && myRole === 'owner' && m.sender_id !== 0) return true;
+    // 群主在群内撤回任何消息（含自己发的）都不受 3 分钟限制
+    const ownerUnlimited = isGroup && myRole === 'owner';
+    if (m.sender_id === me.id) return ownerUnlimited || Date.now() - m.created_at <= RECALL_WINDOW;
+    if (ownerUnlimited && m.sender_id !== 0) return true;
     return false;
   };
 
@@ -1331,7 +1333,10 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                 ...(canRecall(actionMsg)
                   ? [{
                       icon: <IconTile name="clock" tone="amber" box={34} size={18} />,
-                      label: actionMsg.sender_id === me.id ? '撤回（3 分钟内）' : '撤回该成员消息',
+                      label:
+                        actionMsg.sender_id === me.id
+                          ? isGroup && myRole === 'owner' ? '撤回' : '撤回（3 分钟内）'
+                          : '撤回该成员消息',
                       onClick: () => doRecall(actionMsg),
                     }]
                   : []),
