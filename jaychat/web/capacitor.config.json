@@ -3,12 +3,12 @@
   "appName": "Jay Chat",
   "webDir": "dist",
   "server": {
-    "url": "http://jaychat.ct.ws",
-    "androidScheme": "http",
-    "cleartext": true
+    "url": "https://jaychat.ct.ws",
+    "androidScheme": "https",
+    "cleartext": false
   },
   "android": {
-    "allowMixedContent": true,
+    "allowMixedContent": false,
     "backgroundColor": "#070B18"
   },
   "plugins": {
