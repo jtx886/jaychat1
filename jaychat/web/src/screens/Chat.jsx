@@ -803,13 +803,65 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   const doDeleteLocal = (m) => setMessages((list) => list.filter((x) => x.id !== m.id));
-  const doCopy = async (m) => {
+
+  // 非安全上下文（App 用 http 打开页面、部分 WebView）里 navigator.clipboard 不可用，
+  // 必须退回 execCommand，否则「复制」会直接失败。
+  const legacyCopy = (text) => {
     try {
-      await navigator.clipboard.writeText(m.content);
-      toast('已复制');
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.left = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
     } catch {
-      toast('复制失败', 'error');
+      return false;
     }
+  };
+
+  const copyText = (text) => {
+    text = String(text ?? '');
+    if (!text) return false;
+    if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => toast('已复制'),
+        () => (legacyCopy(text) ? toast('已复制') : toast('复制失败，请长按文字手动选择', 'error'))
+      );
+      return true;
+    }
+    if (legacyCopy(text)) {
+      toast('已复制');
+      return true;
+    }
+    toast('复制失败，请长按文字手动选择', 'error');
+    return false;
+  };
+
+  const doCopy = (m) => {
+    if (m.msg_type === 'forward') {
+      const records = parseForward(m.content) || [];
+      const lines = records.map((r) => {
+        const body =
+          r.msgType === 'text' ? r.content
+            : r.msgType === 'image' ? '[图片]'
+              : r.msgType === 'video' ? '[视频]'
+                : r.msgType === 'sticker' ? '[表情]'
+                  : r.msgType === 'forward' ? '[聊天记录]'
+                    : '[消息]';
+        return `${r.name || '用户'}：${body}`;
+      });
+      copyText(lines.join('\n'));
+      return;
+    }
+    copyText(m.msg_type === 'sticker' ? m.content || '' : m.content || '');
   };
 
   const onlineMembers = useMemo(() => {
@@ -1332,7 +1384,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
       <ActionSheet
         open={!!actionMsg}
         onClose={() => setActionMsg(null)}
-        title={actionMsg?.msg_type === 'text' || actionMsg?.msg_type === 'sticker' ? '消息操作' : '媒体操作'}
+        title={['text', 'sticker', 'forward'].includes(actionMsg?.msg_type) ? '消息操作' : '媒体操作'}
         actions={
           actionMsg
             ? [
@@ -1350,7 +1402,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
                     }]
                   : []),
                 { icon: <IconTile name="check" tone="sky" box={34} size={18} />, label: '多选', onClick: () => { setPanel(null); setMultiSel(new Set([actionMsg.id])); } },
-                ...((actionMsg.msg_type === 'text' || actionMsg.msg_type === 'sticker') && !actionMsg.recalled
+                ...((actionMsg.msg_type === 'text' || actionMsg.msg_type === 'sticker' || actionMsg.msg_type === 'forward') && !actionMsg.recalled
                   ? [{ icon: <IconTile name="copy" tone="sky" box={34} size={18} />, label: '复制', onClick: () => doCopy(actionMsg) }]
                   : []),
                 ...(actionMsg.msg_type === 'sticker' && actionMsg.media_url && !actionMsg.recalled
