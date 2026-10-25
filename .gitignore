@@ -13,6 +13,12 @@ jaychat/deploy/uploads/
 jaychat/deploy/caddy-data/
 jaychat/deploy/caddy-config/
 
+# 原生安卓构建中间产物
+jaychat/android-native/.gradle/
+jaychat/android-native/build/
+jaychat/android-native/app/build/
+jaychat/android-native/local.properties
+
 # 安卓构建中间产物
 jaychat/web/android/.gradle/
 jaychat/web/android/build/
