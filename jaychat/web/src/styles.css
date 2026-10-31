@@ -955,6 +955,9 @@ body {
   background: rgba(255, 184, 77, .12); border: 1px solid rgba(255, 184, 77, .3);
   color: #ffd79a; font-size: 13px;
 }
+.admin-chat-orig-label {
+  font-size: 11px; font-weight: 700; color: rgba(255, 215, 154, .85);
+}
 .admin-chat-quote {
   margin-bottom: 5px; padding: 4px 8px; border-left: 3px solid rgba(255,255,255,.28);
   background: rgba(255,255,255,.05); border-radius: 6px; font-size: 12.5px; color: var(--text-2);

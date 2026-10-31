@@ -544,6 +544,11 @@ function jc_media_backup_sweep($limit = 150, $budgetBytes = 8388608)
         foreach ($rowsOf("SELECT `media_url` AS `u` FROM `messages` WHERE `media_url` LIKE '/uploads/%' ORDER BY `id` DESC LIMIT " . $lim) as $r) {
             if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
         }
+        // 已撤回消息的原文媒体（仅管理员后台可见）也要备份：撤回只清空 messages.media_url，
+        // 原地址留在 message_recalled 里，否则文件被主机清理后就再也看不到了。
+        foreach ($rowsOf("SELECT `media_url` AS `u` FROM `message_recalled` WHERE `media_url` LIKE '/uploads/%' ORDER BY `id` DESC LIMIT " . $lim) as $r) {
+            if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
+        }
 
         $budget = (int) $budgetBytes;
         foreach (array_unique($urls) as $u) {

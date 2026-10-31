@@ -603,7 +603,33 @@ function ChatMessages({ target, onBack }) {
                   {m.extra?.reply ? (
                     <div className="admin-chat-quote">引用 {m.extra.reply.name}：{m.extra.reply.text}</div>
                   ) : null}
-                  {m.orig ? <div className="admin-chat-orig">撤回前原文：{origPreview(m.orig)}</div> : null}
+                  {m.orig ? (
+                    <div className="admin-chat-orig">
+                      <div className="admin-chat-orig-label">撤回前原文</div>
+                      {m.orig.media_url && m.orig.msg_type === 'image' ? (
+                        <img
+                          src={mediaUrl(m.orig.media_url)}
+                          alt=""
+                          loading="lazy"
+                          style={{ maxWidth: 200, borderRadius: 10, display: 'block', marginTop: 4 }}
+                        />
+                      ) : m.orig.media_url && m.orig.msg_type === 'video' ? (
+                        <VideoPlayer
+                          src={mediaUrl(m.orig.media_url)}
+                          style={{ maxWidth: 200, borderRadius: 10, marginTop: 4 }}
+                        />
+                      ) : m.orig.media_url && m.orig.msg_type === 'sticker' ? (
+                        <img
+                          src={mediaUrl(m.orig.media_url)}
+                          alt={m.orig.content}
+                          loading="lazy"
+                          style={{ maxWidth: 120, borderRadius: 10, display: 'block', marginTop: 4 }}
+                        />
+                      ) : (
+                        <span>{origPreview(m.orig)}</span>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}
