@@ -217,7 +217,7 @@ export default function AuthScreen() {
           </div>
 
           <div className="center hint" style={{ marginTop: 18 }}>
-            官方账号：杰同学（官方群群主）
+            Jay Chat v1.0.0
           </div>
         </div>
       </div>

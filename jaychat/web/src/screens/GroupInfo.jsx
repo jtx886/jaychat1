@@ -278,7 +278,7 @@ export default function GroupInfoScreen({ groupId }) {
 
         <div className="mx mt" style={{ marginTop: 18, display: 'grid', gap: 10 }}>
           {group.is_official ? (
-            <div className="hint center">官方群不支持退出，由官方账号「杰同学」管理</div>
+            <div className="hint center">官方群不支持退出</div>
           ) : (
             <>
               {group.dissolved ? <div className="hint center">该群聊已解散，仅可查看历史消息</div> : null}

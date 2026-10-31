@@ -61,7 +61,7 @@ export default function MomentsScreen({ scope = 'all' }) {
     <div className="page" style={{ height: '100%' }}>
       <TopBar
         title={tab === 'friends' ? '好友动态' : '动态社区'}
-        sub={tab === 'friends' ? '只看已添加好友发布的动态' : '全站用户动态大社区'}
+        sub={tab === 'friends' ? '只看已添加好友发布的动态' : '全站用户动态'}
         onBack={back}
         right={
           <div className="flex gap6">

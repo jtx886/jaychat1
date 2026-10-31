@@ -99,7 +99,7 @@ export default function ContactsScreen() {
               <Avatar name="动" size={44} style={{ background: 'linear-gradient(135deg,#ff8fd0,#e0559f)' }} />
               <div className="list-main">
                 <div className="list-title">动态</div>
-                <div className="list-desc">查看全站所有用户发布的动态（大社区）</div>
+                <div className="list-desc">查看全站所有用户发布的动态</div>
               </div>
               <span className="chev dim">›</span>
             </div>
