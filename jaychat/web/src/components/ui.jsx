@@ -257,13 +257,11 @@ function videoMimeOf(u) {
   return 'video/mp4';
 }
 
-/** 视频播放（内置播放器，不依赖浏览器自带控制条）：
- *  - 统一走 /api/media（正确的 Content-Type + Range 支持）
- *  - 用 <source type> 显式声明容器类型：部分系统浏览器只看 URL 后缀，
- *    视频落盘名以 .dat 结尾会被判为未知格式直接拒绝播放
- *  - /api/media 失效时自动降级 /uploads 直链重试（直链由 .htaccess 强制成视频类型）
- *  - 自带播放/暂停、进度条、时间显示，避免系统浏览器控制条不渲染导致「只有黑块」
- *  - 解码失败（典型是 HEVC/H.265 编码）时明确提示，并提供下载入口
+/** 视频播放（内置播放器）：
+ *  1) 优先直连静态文件 /uploads/...（Apache 原生输出 Range，最接近浏览器直接打开视频地址的行为，
+ *     不经过 PHP，避免主机进程超时/连接被中断导致只能加载一部分）；
+ *  2) 直链失败再自动走 /api/media（可自动从数据库备份恢复被主机清理的文件）；
+ *  3) 自带播放/暂停、进度条、时间，完全不依赖系统浏览器的原生控制条。
  */
 function clipTime(sec) {
   const n = Math.max(0, Math.floor(Number(sec) || 0));
@@ -273,114 +271,82 @@ function clipTime(sec) {
 }
 
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
-  // null=正常；'network'=下载/网络问题；'decode'=编码或格式不被当前浏览器支持
-  const [err, setErr] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [mode, setMode] = useState(0); // 0=静态直链；1=/api/media
   const [nonce, setNonce] = useState(0);
-  const [useDirect, setUseDirect] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [dur, setDur] = useState(0);
   const [cur, setCur] = useState(0);
   const videoRef = useRef(null);
-  const failRef = useRef(() => {});
-  const primary = mediaUrl(src);
-  useEffect(() => {
-    setErr(null);
-    setNonce(0);
-    setUseDirect(false);
-    setPlaying(false);
-    setDur(0);
-    setCur(0);
-  }, [primary]);
-  // 从 /api/media?f=xxx 反解出 /uploads/xxx 直链，作为降级地址
+
+  const api = mediaUrl(src);
+  // 直链：src 本身是 /uploads/...，或是 /api/media?f=... 时反解出来
   const direct = (() => {
-    const s = String(primary || '');
+    const raw = String(src || '');
+    if (raw.startsWith('/uploads/') || raw.startsWith('uploads/')) {
+      return directMediaUrl(raw.startsWith('/') ? raw : '/' + raw);
+    }
     const marker = '/api/media?f=';
-    const i = s.indexOf(marker);
+    const i = api.indexOf(marker);
     if (i < 0) return '';
     try {
-      return s.slice(0, i) + '/uploads/' + decodeURIComponent(s.slice(i + marker.length).split('#')[0]);
+      return api.slice(0, i) + '/uploads/' + decodeURIComponent(api.slice(i + marker.length).split('#')[0]);
     } catch {
       return '';
     }
   })();
-  const base = useDirect && direct ? direct : primary;
+  const base = mode === 0 && direct ? direct : api;
   const url = nonce ? base + (base.includes('?') ? '&' : '?') + 'r=' + nonce : base;
-  const openUrl = (() => {
-    const u = direct || primary;
-    if (!u) return '';
-    try {
-      return new URL(u, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
-    } catch {
-      return u;
-    }
-  })();
-  failRef.current = (kind) => {
-    if (!useDirect && direct) {
-      setUseDirect(true);
+
+  // 换片源时重置状态
+  useEffect(() => {
+    setFailed(false);
+    setMode(0);
+    setNonce(0);
+    setPlaying(false);
+    setDur(0);
+    setCur(0);
+  }, [api]);
+
+  const fail = () => {
+    // 直链不通 → 换 /api/media（可触发数据库备份恢复）；再失败才显示失败
+    if (mode === 0 && direct) {
+      setMode(1);
       setNonce(Date.now());
       return;
     }
-    if (kind === 'decode' && url) {
-      // 确认文件确实能取到：取不到就是网络/文件问题，而不是编码问题，避免误导
-      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
-      fetch(url, { headers: { Range: 'bytes=0-1' }, cache: 'no-store', signal: ctrl?.signal })
-        .then((r) => setErr(r.ok || r.status === 206 ? 'decode' : 'network'))
-        .catch(() => setErr('network'))
-        .finally(() => {
-          if (timer) clearTimeout(timer);
-        });
-      return;
-    }
-    setErr(kind);
+    setFailed(true);
   };
-  // 兜底：30 秒仍无任何元数据、且已不在下载状态（主机会话被丢弃）才判定失败
+
+  // 兜底：30 秒仍无任何元数据、且已不在下载状态才判定失败
   useEffect(() => {
+    if (failed) return;
     const t = setTimeout(() => {
       const v = videoRef.current;
       // networkState=2 表示仍在下载（非 faststart 的视频可能要下完才拿到元数据），不能误判
-      if (v && !v.error && v.readyState === 0 && v.networkState !== 2) failRef.current('network');
+      if (v && !v.error && v.readyState === 0 && v.networkState !== 2) fail();
     }, 30000);
     return () => clearTimeout(t);
-  }, [url]);
-  if (err) {
+  }, [url, failed]);
+
+  if (failed) {
     return (
-      <div
-        className={'video-fail' + (className ? ' ' + className : '')}
-        style={style}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={'video-fail' + (className ? ' ' + className : '')} style={style} onClick={(e) => e.stopPropagation()}>
         <Icon name="video" size={22} strokeWidth={1.8} />
-        <span>{err === 'decode' ? '当前浏览器不支持该视频编码' : '视频加载失败'}</span>
-        <span className="video-fail-hint">
-          {err === 'decode'
-            ? '视频可能是 HEVC/H.265 编码，网页播放器无法解码；可下载后在本机相册播放'
-            : '请检查网络后重试'}
-        </span>
-        <div className="video-fail-actions">
-          {openUrl && (
-            <a className="btn btn-sm" href={openUrl} download>
-              下载视频
-            </a>
-          )}
-          <button
-            className="btn btn-sm"
-            onClick={() => {
-              setErr(null);
-              setNonce(Date.now());
-            }}
-          >
-            重试
-          </button>
-        </div>
+        <span>视频加载失败</span>
+        <button
+          className="btn btn-sm"
+          onClick={() => {
+            setFailed(false);
+            setMode(direct ? 0 : 1);
+            setNonce(Date.now());
+          }}
+        >
+          重试
+        </button>
       </div>
     );
   }
-  const onMediaError = (e) => {
-    // MediaError: 3=解码失败 4=格式/编码不支持 → 换播放器也无法解码，给出明确提示
-    const code = e?.currentTarget?.error?.code;
-    failRef.current(code === 3 || code === 4 ? 'decode' : 'network');
-  };
   const toggle = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -421,7 +387,7 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
         preload="metadata"
         controls={false}
         onClick={toggle}
-        onError={onMediaError}
+        onError={fail}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => {
@@ -432,7 +398,7 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
         onLoadedMetadata={(e) => setDur(Number(e.currentTarget.duration) || 0)}
         onTimeUpdate={(e) => setCur(Number(e.currentTarget.currentTime) || 0)}
       >
-        <source src={url} type={videoMimeOf(url)} onError={onMediaError} />
+        <source src={url} type={videoMimeOf(url)} onError={fail} />
       </video>
       {!playing ? (
         <button type="button" className="vp-big" aria-label="播放" onClick={toggle}>

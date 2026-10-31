@@ -540,7 +540,9 @@ route('GET', '#^/api/media$#', function ($params, $body) {
     $fname = basename(str_replace('.dat', '', $full));
     header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $fname) . '"');
     header('Accept-Ranges: bytes');
-    header('Cache-Control: public, max-age=604800');
+    // 分段响应（206）绝不能带长缓存：部分浏览器/WebView 会把一个片段当成整段缓存，
+    // 之后播放到未缓存的区间就黑屏或直接报错。
+    header('Cache-Control: no-store');
     header('Access-Control-Allow-Origin: *');
     header('X-Content-Type-Options: nosniff');
 
