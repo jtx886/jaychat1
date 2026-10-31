@@ -375,6 +375,26 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
     }
 
     // 统计已到达的分片数
+    // 结果缓存：请求响应在主机侧被丢弃后客户端会重试同一片，此时如果服务端已经
+    // 合并完成，直接返回缓存的结果（否则重试的分片会覆盖已删除的分片，永远「未完成」）。
+    $resultPath = $dir . '/_result.json';
+    $readResult = function () use ($resultPath) {
+        if (!is_file($resultPath)) {
+            return null;
+        }
+        $cached = @json_decode((string) @file_get_contents($resultPath), true);
+        // 只复用成功结果：失败（如目录暂时不可写）不缓存，客户端重试时重新合并才有机会成功
+        if (is_array($cached) && isset($cached['status'], $cached['data']) && (int) $cached['status'] === 200) {
+            return $cached;
+        }
+        return null;
+    };
+    $cached = $readResult();
+    if ($cached) {
+        @unlink($part);
+        return array(200, $cached['data']);
+    }
+
     $have = 0;
     for ($i = 0; $i < $total; $i++) {
         if (is_file($dir . '/' . $i . '.part')) {
@@ -386,9 +406,29 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
     }
 
     // 全部分片到齐 → 合并
+    // 并发上传时可能有两个请求同时判定「到齐」，必须用文件锁保证只合并一次；
+    // 后到者拿到锁后直接读取前者写入的结果，避免重复合并造成文件损坏/请求失败。
+    $lockPath = $dir . '/_merge.lock';
+    $lock = @fopen($lockPath, 'c');
+    if (!$lock) {
+        return array(400, array('error' => '上传失败：无法锁定分片目录'));
+    }
+    @flock($lock, LOCK_EX);
+    // 拿到锁后再查一次：等待期间另一个请求可能已经合并完成
+    $cached = $readResult();
+    if ($cached) {
+        @flock($lock, LOCK_UN);
+        @fclose($lock);
+        for ($i = 0; $i < $total; $i++) { @unlink($dir . '/' . $i . '.part'); }
+        @unlink($part);
+        return array(200, $cached['data']);
+    }
+
     $assembled = $dir . '/_assembled.tmp';
     $out = @fopen($assembled, 'wb');
     if (!$out) {
+        @flock($lock, LOCK_UN);
+        @fclose($lock);
         return array(400, array('error' => '上传失败：无法合并分片'));
     }
     $size = 0;
@@ -396,6 +436,8 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
         $fp = @fopen($dir . '/' . $i . '.part', 'rb');
         if (!$fp) {
             @fclose($out);
+            @flock($lock, LOCK_UN);
+            @fclose($lock);
             return array(400, array('error' => '上传失败：分片缺失'));
         }
         $size += (int) @stream_copy_to_stream($fp, $out);
@@ -406,13 +448,26 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
     $name = isset($_SERVER['HTTP_X_FILE_NAME']) ? rawurldecode((string) $_SERVER['HTTP_X_FILE_NAME']) : '';
     $result = jc_store_upload($assembled, $name, $size, true);
 
-    // 无论成功与否都清理分片目录，避免占用空间
-    for ($i = 0; $i < $total; $i++) {
-        @unlink($dir . '/' . $i . '.part');
+    // 成功时缓存结果供同时到达/重试的请求直接复用，避免它们重复合并。
+    // 先写临时文件再 rename，保证并发读到的始终是完整 JSON。
+    if ((int) $result[0] === 200) {
+        $resultTmp = $resultPath . '.tmp';
+        @file_put_contents(
+            $resultTmp,
+            json_encode(array('status' => 200, 'data' => $result[1]), JSON_UNESCAPED_UNICODE)
+        );
+        @rename($resultTmp, $resultPath);
+    }
+    @flock($lock, LOCK_UN);
+    @fclose($lock);
+
+    // 成功后清理分片；保留 _result.json 供并发请求读取（旧的残留目录由 2 小时清理任务回收）
+    if ((int) $result[0] === 200) {
+        for ($i = 0; $i < $total; $i++) {
+            @unlink($dir . '/' . $i . '.part');
+        }
     }
     @unlink($assembled);
-    @rmdir($dir);
-    @rmdir(dirname($dir));
 
     return $result;
 });
@@ -511,7 +566,9 @@ function jc_media_mime($path)
     }
     $ext = (string) pathinfo($name, PATHINFO_EXTENSION);
     $map = array(
-        'mp4' => 'video/mp4', 'm4v' => 'video/mp4', 'mov' => 'video/quicktime',
+        // mov/m4v 本质是 MP4 容器：标成 video/quicktime 时 Chrome/Android 会直接拒绝，
+        // 标成 video/mp4 后 H.264 编码的 MOV 在多数浏览器都能正常播放。
+        'mp4' => 'video/mp4', 'm4v' => 'video/mp4', 'mov' => 'video/mp4',
         'webm' => 'video/webm', 'ogv' => 'video/ogg', 'avi' => 'video/x-msvideo',
         'mkv' => 'video/x-matroska', '3gp' => 'video/3gpp', 'flv' => 'video/x-flv',
         'wmv' => 'video/x-ms-wmv', 'mpeg' => 'video/mpeg', 'mpg' => 'video/mpeg',

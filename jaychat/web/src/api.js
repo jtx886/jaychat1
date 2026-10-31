@@ -280,9 +280,10 @@ async function uploadChunked(file, kind) {
     'X-File-Kind': kind,
   };
 
-  const postChunk = async (index) => {
+  const postChunkOnce = async (index) => {
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 60000) : null;
+    // 免费主机写入分片较慢，超时放宽到 120s，避免网络稍慢就被误判失败
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 120000) : null;
     let res;
     try {
       res = await fetch(getBase() + '/api/upload/chunk', {
@@ -301,6 +302,26 @@ async function uploadChunked(file, kind) {
     return data;
   };
 
+  /**
+   * 单片上传（失败自动重试）：
+   * 共享主机偶发丢弃连接、返回 502/504，重试同一片是安全的——服务端按
+   * X-Chunk-Index 覆盖写入，不会产生重复数据。鉴权/参数类 4xx 不重试。
+   */
+  const postChunk = async (index) => {
+    let lastErr = null;
+    // 4 次尝试 + 递增退避：主机丢连接往往是短暂的，多等几秒通常就能恢复
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        return await postChunkOnce(index);
+      } catch (e) {
+        lastErr = e;
+        if (e.status && e.status < 500) throw e;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
+    throw lastErr;
+  };
+
   // 并发池：按序分发分片，最多 CHUNK_CONCURRENCY 路同时在传（分片乱序到达不影响合并）
   let next = 0;
   let firstError = null;
@@ -309,18 +330,7 @@ async function uploadChunked(file, kind) {
       const i = next;
       next += 1;
       try {
-        let data;
-        try {
-          data = await postChunk(i);
-        } catch (e) {
-          // 网络抖动导致单片失败时自动重试一次（鉴权/参数类错误不重试）
-          if (!e.status) {
-            await new Promise((r) => setTimeout(r, 600));
-            data = await postChunk(i);
-          } else {
-            throw e;
-          }
-        }
+        const data = await postChunk(i);
         // 最后一片到齐时服务端在本次请求里合并完成并返回 url
         if (data && data.url) return data;
       } catch (e) {
@@ -365,29 +375,36 @@ async function uploadFile(file, kind) {
   if (prepared.size > MAX_UPLOAD_BYTES) {
     throw new ApiError('文件超过 10MB，请选择更小的文件（视频请先裁剪）', 400);
   }
-  // 超过单请求安全上限：直接分片，永远不撞主机的 2MB / post_max_size 限制
-  if (prepared.size > SINGLE_MAX) {
-    return uploadChunked(prepared, k);
-  }
+  // 上传期间暂停长轮询：免费主机 PHP worker 极少，8s 长轮询会一直占着一个 worker，
+  // 上传请求因此被主机直接丢弃（表现为「网络连接被中断」）。上传结束立即恢复。
+  ws.pausePolling();
   try {
-    return await uploadDirect(prepared, k, 'form');
-  } catch (e) {
-    if (e.status === 401 || e.status === 429) throw e;
+    // 超过单请求安全上限：直接分片，永远不撞主机的 2MB / post_max_size 限制
+    if (prepared.size > SINGLE_MAX) {
+      return await uploadChunked(prepared, k);
+    }
     try {
-      // 主机/WAF 拦截 multipart 时，改发原始二进制
-      return await uploadDirect(prepared, k, 'raw');
-    } catch (e2) {
-      if (e2.status === 401 || e2.status === 429) throw e2;
+      return await uploadDirect(prepared, k, 'form');
+    } catch (e) {
+      if (e.status === 401 || e.status === 429) throw e;
       try {
-        // 仍然失败：改用分片（可绕过单请求体积与表单限制）
-        return await uploadChunked(prepared, k);
-      } catch (e3) {
-        if (e2.status === 0 || e3.status === 0) {
-          throw new ApiError('上传失败：网络连接被中断，请换用 WiFi/移动网络后重试', 0);
+        // 主机/WAF 拦截 multipart 时，改发原始二进制
+        return await uploadDirect(prepared, k, 'raw');
+      } catch (e2) {
+        if (e2.status === 401 || e2.status === 429) throw e2;
+        try {
+          // 仍然失败：改用分片（可绕过单请求体积与表单限制）
+          return await uploadChunked(prepared, k);
+        } catch (e3) {
+          if (e2.status === 0 || e3.status === 0) {
+            throw new ApiError('上传失败：网络连接被中断，请换用 WiFi/移动网络后重试', 0);
+          }
+          throw e2;
         }
-        throw e2;
       }
     }
+  } finally {
+    ws.resumePolling();
   }
 }
 
@@ -406,6 +423,14 @@ class Realtime {
     this.pollCapable = null; // null=未探测 | 'yes'=后端支持轮询 | 'no'=后端无轮询（走 WebSocket）
     this.longPoll = true; // 是否启用长轮询（主机不支持时自动退回固定间隔轮询）
     this.pollFail = 0;
+    this.paused = 0; // 上传期间暂停轮询，避免长轮询占住免费主机极少的 PHP worker
+  }
+  /** 上传开始：暂停轮询（计数式，多个并行上传只恢复一次） */
+  pausePolling() {
+    this.paused += 1;
+  }
+  resumePolling() {
+    this.paused = Math.max(0, this.paused - 1);
   }
   on(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -496,6 +521,11 @@ class Realtime {
   }
   async pollOnce() {
     if (this.mode !== 'poll' || !tokenStore.get()) return;
+    // 上传大文件时先暂停轮询：长轮询会长时间占住 worker，导致分片请求被主机丢弃
+    if (this.paused) {
+      this.timer = setTimeout(() => this.pollOnce(), 2000);
+      return;
+    }
     let ok = false;
     // 免费主机 PHP worker 并发极少：长轮询挂太久会占住 worker，
     // 导致页面/其他接口排队变慢。8 秒在实时性与流畅度之间取平衡。
@@ -573,6 +603,7 @@ class Realtime {
     this.retry = 0;
     this.queue = [];
     this.status = 'idle';
+    this.paused = 0;
   }
 }
 

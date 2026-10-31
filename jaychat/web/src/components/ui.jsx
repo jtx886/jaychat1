@@ -245,15 +245,17 @@ export function SmartImage({ src, alt = '', className, style, ...rest }) {
 /** 视频播放：
  *  - 统一走 /api/media（正确的 Content-Type + Range 支持）
  *  - /api/media 失效时自动降级 /uploads 直链重试
+ *  - 解码失败（典型是 HEVC/H.265 编码）时明确提示，并提供「用系统播放器打开」
  *  - 仍失败显示「视频加载失败 + 重试」，绝不留一块黑屏
  */
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
-  const [err, setErr] = useState(false);
+  // null=正常；'network'=下载/网络问题；'decode'=编码或格式不被当前浏览器支持
+  const [err, setErr] = useState(null);
   const [nonce, setNonce] = useState(0);
   const [useDirect, setUseDirect] = useState(false);
   const primary = mediaUrl(src);
   useEffect(() => {
-    setErr(false);
+    setErr(null);
     setNonce(0);
     setUseDirect(false);
   }, [primary]);
@@ -269,6 +271,15 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       return '';
     }
   })();
+  const openUrl = (() => {
+    const u = direct || primary;
+    if (!u) return '';
+    try {
+      return new URL(u, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
+    } catch {
+      return u;
+    }
+  })();
   if (err) {
     return (
       <div
@@ -277,16 +288,28 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
         onClick={(e) => e.stopPropagation()}
       >
         <Icon name="video" size={22} strokeWidth={1.8} />
-        <span>视频加载失败</span>
-        <button
-          className="btn btn-sm"
-          onClick={() => {
-            setErr(false);
-            setNonce(Date.now());
-          }}
-        >
-          重试
-        </button>
+        <span>{err === 'decode' ? '当前浏览器不支持该视频编码' : '视频加载失败'}</span>
+        <span className="video-fail-hint">
+          {err === 'decode'
+            ? '视频可能是 HEVC/H.265 编码，请用手机系统播放器打开'
+            : '请检查网络后重试'}
+        </span>
+        <div className="video-fail-actions">
+          {openUrl && (
+            <a className="btn btn-sm" href={openUrl} target="_blank" rel="noreferrer">
+              用系统播放器打开
+            </a>
+          )}
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              setErr(null);
+              setNonce(Date.now());
+            }}
+          >
+            重试
+          </button>
+        </div>
       </div>
     );
   }
@@ -300,14 +323,20 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       controls
       autoPlay={autoPlay}
       playsInline
+      webkit-playsinline="true"
+      x5-playsinline="true"
+      x5-video-player-type="h5"
       preload="metadata"
       onClick={onClick}
-      onError={() => {
+      onError={(e) => {
+        // MediaError: 3=解码失败 4=格式/编码不支持 → 换播放器也无法解码，给出明确提示
+        const code = e?.currentTarget?.error?.code;
+        const kind = code === 3 || code === 4 ? 'decode' : 'network';
         if (!useDirect && direct) {
           setUseDirect(true);
           setNonce(Date.now());
         } else {
-          setErr(true);
+          setErr(kind);
         }
       }}
     />
