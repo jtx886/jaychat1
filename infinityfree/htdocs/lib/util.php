@@ -49,3 +49,37 @@ function empty_obj()
 {
     return new stdClass();
 }
+
+/**
+ * 确保 uploads 目录存在，并写入保护性 .htaccess。
+ *
+ * 部署包不再包含 uploads/ 目录（避免个别主机的解压工具「先清空再写入」把用户
+ * 上传的头像 / 动态图片 / 视频一起删掉）；目录改由这里在运行时创建。
+ * 只在缺失时写文件，正常请求几乎零开销。
+ */
+function jc_ensure_uploads()
+{
+    $dir = JC_HTDOCS . '/uploads';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0777, true);
+    }
+    $ht = $dir . '/.htaccess';
+    if (is_dir($dir) && !is_file($ht)) {
+        @file_put_contents($ht, <<<'HT'
+# 上传目录：禁止执行任何脚本，防止上传可执行文件被访问
+<FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh|shtml|htaccess|svg)$">
+  Require all denied
+</FilesMatch>
+
+# 禁止目录列出
+Options -Indexes
+
+# 不允许把上传文件当脚本/HTML 解析
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Content-Security-Policy "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
+</IfModule>
+HT
+        );
+    }
+}

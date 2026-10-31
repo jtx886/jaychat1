@@ -24,3 +24,8 @@ require_once __DIR__ . '/mailer.php';
 
 db_install();
 seed_official();
+
+// 用户上传目录在运行时确保存在（部署包不再包含 uploads/，避免解压时被整体清空）
+jc_ensure_uploads();
+// 每日一次：把存量头像 / 动态图片补进数据库备份，之后升级也不会丢
+jc_media_backup_sweep();

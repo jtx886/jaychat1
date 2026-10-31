@@ -227,6 +227,35 @@ function jc_upload_input()
 }
 
 /**
+ * 粗判视频是否 HEVC/H.265 编码（扫描 mp4/mov 里的 hvc1/hev1/hvcC 标记）。
+ * HEVC 在 Chrome / 安卓 WebView / 多数系统浏览器里无法解码，提前告诉发送者，
+ * 免得对方只看到黑屏。
+ */
+function jc_video_is_hevc($file)
+{
+    $fp = @fopen($file, 'rb');
+    if (!$fp) {
+        return false;
+    }
+    $carry = '';
+    $hit = false;
+    while (!feof($fp)) {
+        $buf = @fread($fp, 1048576);
+        if ($buf === false || $buf === '') {
+            break;
+        }
+        $hay = $carry . $buf;
+        if (stripos($hay, 'hvc1') !== false || stripos($hay, 'hev1') !== false || stripos($hay, 'hvcC') !== false) {
+            $hit = true;
+            break;
+        }
+        $carry = substr($hay, -3);
+    }
+    @fclose($fp);
+    return $hit;
+}
+
+/**
  * 把已落地到临时路径的文件校验并保存到 uploads/YYYYMM/。
  * 返回 array($status, $data)，与路由返回值一致。
  */
@@ -275,6 +304,8 @@ function jc_store_upload($tmp, $name, $size, $cleanup)
     }
 
     $rel = '/uploads/' . $sub . '/' . $filename;
+    // 视频编码提示：HEVC/H.265 在多数浏览器无法解码，返回给前端提前提示发送者
+    $hevc = $isVideo ? jc_video_is_hevc($dest) : false;
     // 响应发送完成后再写数据库备份：大文件 base64 后的 INSERT 可能耗时 1~2 秒，
     // 放在请求体内会明显拖慢上传返回；shutdown 阶段执行，用户先拿到上传结果。
     // 即使之后部署包覆盖 uploads 目录或主机清理文件，/api/media 也能自动恢复。
@@ -288,6 +319,7 @@ function jc_store_upload($tmp, $name, $size, $cleanup)
         'kind' => $kind,
         'size' => $size,
         'mime' => $info['mime'],
+        'hevc' => $hevc,
     ));
 }
 

@@ -496,6 +496,71 @@ function jc_avatar_backup_existing()
 }
 
 /**
+ * 每日一次的媒体备份巡检（自动执行，无需管理员操作）：
+ * 把数据库里引用到、但还没有备份的上传文件补进 avatar_files。
+ * 这样旧版本上传的头像 / 动态图片也会被保护起来，之后即使 uploads 目录被
+ * 更新包覆盖或主机清理，打开页面时也能自动恢复，不需要用户重新上传。
+ *
+ * 单次最多备份约 8MB，避免把一次请求拖太久；剩余的第二天继续补。
+ */
+function jc_media_backup_sweep($limit = 150, $budgetBytes = 8388608)
+{
+    try {
+        if (!db_table_exists('avatar_files') || !db_table_exists('jc_meta')) {
+            return;
+        }
+        $last = (int) db_value('SELECT `value` FROM `jc_meta` WHERE `name` = ?', array('media_backup_at'));
+        if ($last > 0 && now_ms() - $last < 86400000) {
+            return;
+        }
+        // 先占位，避免并发请求都跑一遍巡检
+        db_exec_ignore('INSERT INTO `jc_meta` (`name`, `value`) VALUES (?, ?)', array('media_backup_at', (string) now_ms()));
+        db_exec_ignore('UPDATE `jc_meta` SET `value` = ? WHERE `name` = ?', array((string) now_ms(), 'media_backup_at'));
+
+        $lim = max(1, (int) $limit);
+        // 单张表缺失/查询失败不影响其它表：逐条容错
+        $rowsOf = function ($sql) {
+            try {
+                return db_all($sql);
+            } catch (Exception $e) {
+                return array();
+            } catch (Throwable $e) {
+                return array();
+            }
+        };
+        $urls = array();
+        foreach ($rowsOf("SELECT `avatar` AS `u` FROM `users` WHERE `avatar` LIKE '/uploads/%' LIMIT " . $lim) as $r) {
+            if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
+        }
+        foreach ($rowsOf("SELECT `avatar` AS `u` FROM `groups` WHERE `avatar` LIKE '/uploads/%' LIMIT " . $lim) as $r) {
+            if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
+        }
+        foreach ($rowsOf("SELECT `media_url` AS `u` FROM `moments` WHERE `media_url` LIKE '/uploads/%' ORDER BY `id` DESC LIMIT " . $lim) as $r) {
+            if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
+        }
+        foreach ($rowsOf("SELECT `media_url` AS `u` FROM `moment_comments` WHERE `media_url` LIKE '/uploads/%' ORDER BY `id` DESC LIMIT " . $lim) as $r) {
+            if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
+        }
+        foreach ($rowsOf("SELECT `media_url` AS `u` FROM `messages` WHERE `media_url` LIKE '/uploads/%' ORDER BY `id` DESC LIMIT " . $lim) as $r) {
+            if (!empty($r['u'])) { $urls[] = (string) $r['u']; }
+        }
+
+        $budget = (int) $budgetBytes;
+        foreach (array_unique($urls) as $u) {
+            $file = JC_HTDOCS . $u;
+            $size = @filesize($file);
+            if (!$size || $size > 4194304 || $size > $budget) {
+                continue;
+            }
+            $budget -= $size;
+            jc_file_backup($u);
+        }
+    } catch (Exception $e) {
+    } catch (Throwable $e) {
+    }
+}
+
+/**
  * 头像值规范化：
  *   允许 preset:N 短标记、站内 /uploads /assets 路径、http(s) 外链、data:image 内联图。
  *   其他协议（javascript:、file: 等）一律拒绝，避免被注入到 <img src> 造成安全问题。

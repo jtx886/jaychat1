@@ -586,10 +586,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     const burnSec = Math.min(Math.max(Number(oneTimeSec) || 5, 1), 300);
     setSending(true);
     setPanel(null);
+    let hevcWarn = false;
     try {
       // 2 路并发上传 + 发送：多张图片/视频不再一张等一张，速度翻倍
       await mapPool(pendingFiles, 2, async (item) => {
         const up = await api.upload(item.file, item.type);
+        // HEVC/H.265 视频在多数浏览器无法解码，发送后提示一次，避免对方黑屏还不知道原因
+        if (up.hevc) hevcWarn = true;
         const d = await api.post('/api/messages', {
           convType, convId, msg_type: up.kind === 'video' ? 'video' : 'image',
           media_url: up.url, media_thumb: '', one_time: oneTime, burn_sec: burnSec,
@@ -597,7 +600,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
       });
       setTimeout(scrollToBottom, 60);
-      toast(oneTime ? `一次性消息已发送（对方查看后 ${burnSec} 秒自动销毁）` : '发送成功');
+      toast(
+        oneTime
+          ? `一次性消息已发送（对方查看后 ${burnSec} 秒自动销毁）`
+          : hevcWarn
+            ? '已发送。注意：视频为 HEVC/H.265 编码，部分浏览器可能无法播放'
+            : '发送成功'
+      );
     } catch (e) {
       toast(e.message, 'error');
     } finally {
