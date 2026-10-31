@@ -257,116 +257,10 @@ function videoMimeOf(u) {
   return 'video/mp4';
 }
 
-/** 视频播放（内置播放器）：
- *  1) 优先直连静态文件 /uploads/...（Apache 原生输出 Range，最接近浏览器直接打开视频地址的行为，
- *     不经过 PHP，避免主机进程超时/连接被中断导致只能加载一部分）；
- *  2) 直链失败再自动走 /api/media（可自动从数据库备份恢复被主机清理的文件）；
- *  3) 自带播放/暂停、进度条、时间，完全不依赖系统浏览器的原生控制条。
- */
-function clipTime(sec) {
-  const n = Math.max(0, Math.floor(Number(sec) || 0));
-  const m = Math.floor(n / 60);
-  const s = n % 60;
-  return m + ':' + (s < 10 ? '0' + s : String(s));
-}
-
+/** 视频播放：直接使用浏览器原生 video + 自带控制条（不再做任何内置播放器）
+ *  只用标准 HTML5 属性，播放、暂停、进度、全屏全部交给浏览器本身。 */
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
-  const [failed, setFailed] = useState(false);
-  const [mode, setMode] = useState(0); // 0=静态直链；1=/api/media
-  const [nonce, setNonce] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [dur, setDur] = useState(0);
-  const [cur, setCur] = useState(0);
-  const videoRef = useRef(null);
-
-  const api = mediaUrl(src);
-  // 直链：src 本身是 /uploads/...，或是 /api/media?f=... 时反解出来
-  const direct = (() => {
-    const raw = String(src || '');
-    if (raw.startsWith('/uploads/') || raw.startsWith('uploads/')) {
-      return directMediaUrl(raw.startsWith('/') ? raw : '/' + raw);
-    }
-    const marker = '/api/media?f=';
-    const i = api.indexOf(marker);
-    if (i < 0) return '';
-    try {
-      return api.slice(0, i) + '/uploads/' + decodeURIComponent(api.slice(i + marker.length).split('#')[0]);
-    } catch {
-      return '';
-    }
-  })();
-  const base = mode === 0 && direct ? direct : api;
-  const url = nonce ? base + (base.includes('?') ? '&' : '?') + 'r=' + nonce : base;
-
-  // 换片源时重置状态
-  useEffect(() => {
-    setFailed(false);
-    setMode(0);
-    setNonce(0);
-    setPlaying(false);
-    setDur(0);
-    setCur(0);
-  }, [api]);
-
-  const fail = () => {
-    // 直链不通 → 换 /api/media（可触发数据库备份恢复）；再失败才显示失败
-    if (mode === 0 && direct) {
-      setMode(1);
-      setNonce(Date.now());
-      return;
-    }
-    setFailed(true);
-  };
-
-  // 兜底：15 秒仍无任何元数据、且已不在下载状态（文件损坏/主机中断）才判定失败
-  useEffect(() => {
-    if (failed) return;
-    const t = setTimeout(() => {
-      const v = videoRef.current;
-      // networkState=2 表示仍在下载（非 faststart 的视频可能要下完才拿到元数据），不能误判
-      if (v && !v.error && v.readyState === 0 && v.networkState !== 2) fail();
-    }, 15000);
-    return () => clearTimeout(t);
-  }, [url, failed]);
-
-  if (failed) {
-    return (
-      <div className={'video-fail' + (className ? ' ' + className : '')} style={style} onClick={(e) => e.stopPropagation()}>
-        <Icon name="video" size={22} strokeWidth={1.8} />
-        <span>视频加载失败</span>
-        <button
-          className="btn btn-sm"
-          onClick={() => {
-            setFailed(false);
-            setMode(direct ? 0 : 1);
-            setNonce(Date.now());
-          }}
-        >
-          重试
-        </button>
-      </div>
-    );
-  }
-  const toggle = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) {
-      const p = v.play();
-      if (p && p.catch) p.catch(() => {});
-    } else {
-      v.pause();
-    }
-  };
-  const seek = (e) => {
-    const v = videoRef.current;
-    const t = Number(e.target.value) || 0;
-    setCur(t);
-    if (v) {
-      try {
-        v.currentTime = t;
-      } catch {}
-    }
-  };
+  const url = mediaUrl(src);
   return (
     <div
       className={'vp' + (className ? ' ' + className : '')}
@@ -378,49 +272,17 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
     >
       <video
         key={url}
-        ref={videoRef}
         className="vp-video"
-        autoPlay={autoPlay}
+        controls
         playsInline
         webkit-playsinline="true"
-        x5-playsinline="true"
         preload="metadata"
-        controls={false}
-        onClick={toggle}
-        onError={fail}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          setPlaying(false);
-          setCur(0);
-        }}
-        onDurationChange={(e) => setDur(Number(e.currentTarget.duration) || 0)}
-        onLoadedMetadata={(e) => setDur(Number(e.currentTarget.duration) || 0)}
-        onTimeUpdate={(e) => setCur(Number(e.currentTarget.currentTime) || 0)}
+        autoPlay={autoPlay}
+        muted={autoPlay}
+        onClick={onClick}
       >
-        <source src={url} type={videoMimeOf(url)} onError={fail} />
+        <source src={url} type={videoMimeOf(url)} />
       </video>
-      {!playing ? (
-        <button type="button" className="vp-big" aria-label="播放" onClick={toggle}>
-          <Icon name="play" size={24} filled />
-        </button>
-      ) : null}
-      <div className="vp-ctrl" onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="vp-btn" aria-label={playing ? '暂停' : '播放'} onClick={toggle}>
-          <Icon name={playing ? 'pause' : 'play'} size={13} filled />
-        </button>
-        <span className="vp-time">{clipTime(cur)}</span>
-        <input
-          type="range"
-          className="vp-range"
-          min="0"
-          max={dur || 0}
-          step="0.1"
-          value={Math.min(cur, dur || 0)}
-          onChange={seek}
-        />
-        <span className="vp-time">{clipTime(dur)}</span>
-      </div>
     </div>
   );
 }
