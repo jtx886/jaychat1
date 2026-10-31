@@ -5,12 +5,15 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.MediaController
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +64,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
@@ -94,6 +98,7 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
     var sheetOpen by remember { mutableStateOf(false) }
     var actionMsg by remember { mutableStateOf<Message?>(null) }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
+    var videoUrl by remember { mutableStateOf<String?>(null) }
     var myRole by remember { mutableStateOf("member") }
 
     suspend fun pull(markRead: Boolean): List<Message> = withContext(Dispatchers.IO) {
@@ -265,7 +270,8 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
                                 actionMsg = m
                                 sheetOpen = true
                             },
-                            onImage = { viewerUrl = it }
+                            onImage = { viewerUrl = it },
+                            onVideo = { videoUrl = it }
                         )
                     }
                 }
@@ -382,6 +388,49 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
             }
         }
     }
+
+    if (videoUrl != null) {
+        val url = videoUrl!!
+        Dialog(
+            onDismissRequest = { videoUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
+                AndroidView(
+                    factory = { c ->
+                        VideoView(c).apply {
+                            setVideoPath(url)
+                            val mc = MediaController(c)
+                            mc.setAnchorView(this)
+                            setMediaController(mc)
+                            setOnPreparedListener { mp ->
+                                mp.isLooping = false
+                                start()
+                            }
+                            setOnErrorListener { _, _, _ ->
+                                Toast.makeText(c, "该视频无法播放（编码不被设备支持）", Toast.LENGTH_LONG).show()
+                                true
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    onRelease = { it.stopPlayback() }
+                )
+                Text(
+                    "关闭",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(20.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0x66000000))
+                        .clickable { videoUrl = null }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -395,6 +444,7 @@ private fun MessageRow(
     meAvatar: String,
     onLongPress: () -> Unit,
     onImage: (String) -> Unit,
+    onVideo: (String) -> Unit,
 ) {
     val ctx = LocalContext.current
     Column(Modifier.fillMaxWidth()) {
@@ -464,16 +514,7 @@ private fun MessageRow(
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(Color.Black)
                                     .combinedClickable(
-                                        onClick = {
-                                            try {
-                                                ctx.startActivity(
-                                                    Intent(Intent.ACTION_VIEW, Uri.parse(mediaUrl(m.mediaUrl)))
-                                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                )
-                                            } catch (e: Exception) {
-                                                Toast.makeText(ctx, "没有可播放视频的应用", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
+                                        onClick = { onVideo(mediaUrl(m.mediaUrl)) },
                                         onLongClick = onLongPress
                                     ),
                                 contentAlignment = Alignment.Center
