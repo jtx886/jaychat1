@@ -67,30 +67,19 @@ class PersistentCookieJar : CookieJar {
     }
 }
 
-class ChallengeInterceptor(private val jar: PersistentCookieJar) : Interceptor {
-    override fun intercept(chain: Interceptor.Chain): Response {
-        var request = chain.request()
-        var response = chain.proceed(request)
-        var attempt = 0
-        while (attempt < 2) {
-            val type = response.body?.contentType()?.toString() ?: ""
-            if (!type.contains("text/html")) break
-            val html = try {
-                response.peekBody(400_000).string()
-            } catch (e: Exception) {
-                ""
-            }
-            if (!html.contains("toNumbers(")) break
-            response.close()
-            if (!solve(html, request.url)) break
-            request = request.newBuilder().build()
-            response = chain.proceed(request)
-            attempt++
-        }
-        return response
-    }
+class Api {
+    private val cookieJar = PersistentCookieJar()
 
-    private fun solve(html: String, url: HttpUrl): Boolean {
+    val client: OkHttpClient = OkHttpClient.Builder()
+        .cookieJar(cookieJar)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
+    /** 解人机验证：算出 __test 并写入 Cookie，返回是否成功 */
+    private fun solveChallenge(html: String, url: HttpUrl): Boolean {
         val nums = Regex("toNumbers\\(\"([0-9a-fA-F]+)\"\\)")
             .findAll(html).map { it.groupValues[1] }.toList()
         if (nums.size < 3) return false
@@ -102,8 +91,7 @@ class ChallengeInterceptor(private val jar: PersistentCookieJar) : Interceptor {
                 IvParameterSpec(hexToBytes(nums[1]))
             )
             val out = cipher.doFinal(hexToBytes(nums[2]))
-            val token = out.joinToString("") { "%02x".format(it) }
-            jar.put(url, "__test", token)
+            cookieJar.put(url, "__test", out.joinToString("") { "%02x".format(it) })
             true
         } catch (e: Exception) {
             false
@@ -114,19 +102,6 @@ class ChallengeInterceptor(private val jar: PersistentCookieJar) : Interceptor {
         ByteArray(s.length / 2) {
             ((Character.digit(s[it * 2], 16) shl 4) or Character.digit(s[it * 2 + 1], 16)).toByte()
         }
-}
-
-class Api {
-    private val cookieJar = PersistentCookieJar()
-
-    val client: OkHttpClient = OkHttpClient.Builder()
-        .cookieJar(cookieJar)
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .addInterceptor(ChallengeInterceptor(cookieJar))
-        .build()
 
     private fun parseBody(text: String): JSONObject? = try {
         JSONObject(text)
@@ -159,16 +134,36 @@ class Api {
             builder.method(method, rb)
         }
 
-        client.newCall(builder.build()).execute().use { res ->
-            val text = res.body?.string() ?: ""
-            val obj = parseBody(text)
-            if (!res.isSuccessful) {
-                val msg = obj?.optString("error")?.takeIf { it.isNotBlank() }
-                    ?: if (text.startsWith("<")) "服务器验证失败，请检查网络或服务器地址"
-                    else "请求失败（HTTP ${res.code}）"
-                throw ApiException(res.code, msg)
+        // 共享主机的验证页可能出现在任意一次请求上。注意：不能在同一个调用链里重发 POST
+        // （前置网关会直接回 400），必须关掉连接、换新连接再发。
+        var attempt = 0
+        while (true) {
+            val res = client.newCall(builder.build()).execute()
+            val type = res.body?.contentType()?.toString() ?: ""
+            if (type.contains("text/html")) {
+                val html = try {
+                    res.peekBody(400_000).string()
+                } catch (e: Exception) {
+                    ""
+                }
+                if (html.contains("toNumbers(") && attempt < 4 && solveChallenge(html, res.request.url)) {
+                    res.close()
+                    client.connectionPool.evictAll()
+                    attempt++
+                    continue
+                }
             }
-            return obj ?: throw ApiException(res.code, "服务器返回异常（可能触发了主机人机验证）")
+            res.use { r ->
+                val text = r.body?.string() ?: ""
+                val obj = parseBody(text)
+                if (!r.isSuccessful) {
+                    val msg = obj?.optString("error")?.takeIf { it.isNotBlank() }
+                        ?: if (text.startsWith("<")) "服务器验证失败，请检查网络或服务器地址"
+                        else "请求失败（HTTP ${r.code}）"
+                    throw ApiException(r.code, msg)
+                }
+                return obj ?: throw ApiException(r.code, "服务器返回异常（可能触发了主机人机验证）")
+            }
         }
     }
 
