@@ -318,14 +318,14 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
     setFailed(true);
   };
 
-  // 兜底：30 秒仍无任何元数据、且已不在下载状态才判定失败
+  // 兜底：15 秒仍无任何元数据、且已不在下载状态（文件损坏/主机中断）才判定失败
   useEffect(() => {
     if (failed) return;
     const t = setTimeout(() => {
       const v = videoRef.current;
       // networkState=2 表示仍在下载（非 faststart 的视频可能要下完才拿到元数据），不能误判
       if (v && !v.error && v.readyState === 0 && v.networkState !== 2) fail();
-    }, 30000);
+    }, 15000);
     return () => clearTimeout(t);
   }, [url, failed]);
 

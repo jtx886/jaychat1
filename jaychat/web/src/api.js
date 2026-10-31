@@ -278,6 +278,7 @@ async function uploadChunked(file, kind) {
     'Content-Type': 'application/octet-stream',
     'X-Upload-Id': id,
     'X-Chunk-Total': String(total),
+    'X-File-Size': String(file.size),
     'X-File-Name': encodeURIComponent(file.name || 'upload'),
     'X-File-Kind': kind,
   };
@@ -325,30 +326,39 @@ async function uploadChunked(file, kind) {
   };
 
   // 并发池：按序分发分片，最多 CHUNK_CONCURRENCY 路同时在传（分片乱序到达不影响合并）
-  let next = 0;
-  let firstError = null;
-  const worker = async () => {
-    while (next < total && !firstError) {
-      const i = next;
-      next += 1;
-      try {
-        const data = await postChunk(i);
-        // 最后一片到齐时服务端在本次请求里合并完成并返回 url
-        if (data && data.url) return data;
-      } catch (e) {
-        firstError = firstError || e;
-        return null;
+  // 服务端校验合并后大小，不完整时返回 409：重传一轮全部片段即可修复，避免留下不可播放的视频
+  for (let round = 0; round < 2; round++) {
+    let next = 0;
+    let firstError = null;
+    const worker = async () => {
+      while (next < total && !firstError) {
+        const i = next;
+        next += 1;
+        try {
+          const data = await postChunk(i);
+          // 最后一片到齐时服务端在本次请求里合并完成并返回 url
+          if (data && data.url) return data;
+        } catch (e) {
+          firstError = firstError || e;
+          return null;
+        }
       }
+      return null;
+    };
+    const results = await Promise.all(
+      Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker),
+    );
+    if (firstError) {
+      // 409 = 服务端判定文件不完整，整轮重传一次
+      if (firstError.status === 409 && round === 0) continue;
+      throw firstError;
     }
-    return null;
-  };
-  const results = await Promise.all(
-    Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker),
-  );
-  if (firstError) throw firstError;
-  const done = results.find(Boolean);
-  if (done && done.url) return done;
-  throw new ApiError('上传未完成，请重试', 0);
+    const done = results.find(Boolean);
+    if (done && done.url) return done;
+    // 没有错误但没有返回地址（极少数主机把最后一次响应吞掉）：再传一轮
+    if (round === 0) continue;
+  }
+  throw new ApiError('上传失败', 0);
 }
 
 /** 有限并发地处理列表（多文件上传提速用） */

@@ -391,19 +391,28 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
         }
     }
     $part = $dir . '/' . $index . '.part';
+    // 先写临时文件，写完整后再原子改名成 .part：
+    // 「分片文件存在」必须等价于「分片已写完」，否则并行上传时最后到达的那一路会把
+    // 另一路正在写入（0 字节/半截）的分片当成已完成，合并出损坏的视频（播放黑屏 0:00）。
+    $tmpPart = $dir . '/' . $index . '.' . bin2hex(random_bytes(4)) . '.tmp';
     $src = @fopen('php://input', 'rb');
-    $dst = @fopen($part, 'wb');
+    $dst = @fopen($tmpPart, 'wb');
     if (!$src || !$dst) {
         if ($src) { @fclose($src); }
         if ($dst) { @fclose($dst); }
+        @unlink($tmpPart);
         return array(400, array('error' => '上传失败：写入临时文件失败'));
     }
     $bytes = (int) @stream_copy_to_stream($src, $dst);
     @fclose($src);
     @fclose($dst);
     if ($bytes <= 0) {
-        @unlink($part);
+        @unlink($tmpPart);
         return array(400, array('error' => '分片内容为空'));
+    }
+    if (!@rename($tmpPart, $part)) {
+        @unlink($tmpPart);
+        return array(400, array('error' => '上传失败：写入临时文件失败'));
     }
 
     // 统计已到达的分片数
@@ -476,6 +485,16 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
         @fclose($fp);
     }
     @fclose($out);
+
+    // 合并后校验总大小：客户端上传时带上 X-File-Size，对不上说明有分片缺失/被截断。
+    // 绝不能把不完整的文件当成功返回，否则聊天里就是「黑屏、时长 0:00」的坏视频。
+    $expect = isset($_SERVER['HTTP_X_FILE_SIZE']) ? (int) $_SERVER['HTTP_X_FILE_SIZE'] : 0;
+    if ($expect > 0 && $size !== $expect) {
+        @flock($lock, LOCK_UN);
+        @fclose($lock);
+        @unlink($assembled);
+        return array(409, array('error' => '上传失败，请重试', 'retry' => true));
+    }
 
     $name = isset($_SERVER['HTTP_X_FILE_NAME']) ? rawurldecode((string) $_SERVER['HTTP_X_FILE_NAME']) : '';
     $result = jc_store_upload($assembled, $name, $size, true);
