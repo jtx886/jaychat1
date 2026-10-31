@@ -1,6 +1,7 @@
 package com.jaychat.app.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +69,16 @@ import kotlinx.coroutines.withContext
 @Composable
 fun MainScreen(vm: MainViewModel, onOpenChat: (Conversation) -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
+    var overlay by remember { mutableStateOf<String?>(null) }
+
+    if (overlay != null) {
+        BackHandler { overlay = null }
+        when (overlay) {
+            "stickers" -> StickersScreen(onBack = { overlay = null })
+            else -> AdminScreen(onBack = { overlay = null })
+        }
+        return
+    }
 
     Scaffold(
         containerColor = Bg,
@@ -87,6 +99,12 @@ fun MainScreen(vm: MainViewModel, onOpenChat: (Conversation) -> Unit) {
                 NavigationBarItem(
                     selected = tab == 2,
                     onClick = { tab = 2 },
+                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
+                    label = { Text("动态", fontSize = 11.sp) }
+                )
+                NavigationBarItem(
+                    selected = tab == 3,
+                    onClick = { tab = 3 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                     label = { Text("我", fontSize = 11.sp) }
                 )
@@ -97,7 +115,8 @@ fun MainScreen(vm: MainViewModel, onOpenChat: (Conversation) -> Unit) {
             when (tab) {
                 0 -> ConversationsTab(vm, onOpenChat)
                 1 -> ContactsTab(vm, onOpenChat)
-                else -> MeTab(vm)
+                2 -> MomentsTab(vm)
+                else -> MeTab(vm, onOpenStickers = { overlay = "stickers" }, onOpenAdmin = { overlay = "admin" })
             }
         }
     }
@@ -439,8 +458,9 @@ private fun AddFriendDialog(vm: MainViewModel, onDismiss: () -> Unit) {
 /* ------------------------------- 我 ------------------------------- */
 
 @Composable
-private fun MeTab(vm: MainViewModel) {
+private fun MeTab(vm: MainViewModel, onOpenStickers: () -> Unit, onOpenAdmin: () -> Unit) {
     val me = vm.me ?: return
+    val versionName = "2.0.2"
     val ctx = LocalContext.current
     var showServer by remember { mutableStateOf(false) }
 
@@ -471,6 +491,30 @@ private fun MeTab(vm: MainViewModel) {
 
         Spacer(Modifier.height(12.dp))
         Column(Modifier.background(Card)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenStickers)
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("表情包", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text("搜索 · 收藏", color = TextSub, fontSize = 12.sp)
+            }
+            DividerLine(Modifier.padding(start = 18.dp))
+            if (me.canAdmin) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenAdmin)
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("后台管理", color = TextMain, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text("管理员", color = Color(0xFF7FA3FF), fontSize = 12.sp)
+                }
+                DividerLine(Modifier.padding(start = 18.dp))
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -510,7 +554,7 @@ private fun MeTab(vm: MainViewModel) {
 
         Spacer(Modifier.height(24.dp))
         Text(
-            "Jay Chat 安卓原生版 2.0.0",
+            "Jay Chat 安卓原生版 $versionName",
             color = TextSub,
             fontSize = 11.sp,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)

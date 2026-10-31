@@ -327,6 +327,141 @@ class Api {
         return "好友申请已发送"
     }
 
+    /* ------------------------------ 动态 ------------------------------ */
+
+    fun moments(scope: String = "all"): List<Moment> {
+        val o = exec("/api/moments?scope=$scope")
+        val arr = o.optJSONArray("moments") ?: return emptyList()
+        return arr.toList().map { parseMoment(it) }
+    }
+
+    fun myMoments(): List<Moment> {
+        val o = exec("/api/moments/mine")
+        val arr = o.optJSONArray("moments") ?: return emptyList()
+        return arr.toList().map { parseMoment(it) }
+    }
+
+    fun createMoment(text: String, media: List<MomentMedia>, visibility: String = "public"): Moment {
+        val arr = org.json.JSONArray()
+        media.forEach {
+            arr.put(JSONObject().put("url", it.url).put("type", it.type).put("thumb", it.thumb))
+        }
+        val body = JSONObject()
+            .put("text", text)
+            .put("media", arr)
+            .put("visibility", visibility)
+        val o = exec("/api/moments", "POST", body)
+        return o.optJSONObject("moment")?.let { parseMoment(it) }
+            ?: throw ApiException(500, "发布失败")
+    }
+
+    /** 修改动态文案（后端字段名为 content，不是 text） */
+    fun updateMomentText(id: Long, content: String): Moment {
+        val o = exec("/api/moments/$id", "PATCH", JSONObject().put("content", content))
+        return o.optJSONObject("moment")?.let { parseMoment(it) }
+            ?: throw ApiException(500, "保存失败")
+    }
+
+    fun deleteMoment(id: Long) {
+        exec("/api/moments/$id", "DELETE", JSONObject())
+    }
+
+    fun likeMoment(id: Long): Moment {
+        val o = exec("/api/moments/$id/like", "POST", JSONObject())
+        return o.optJSONObject("moment")?.let { parseMoment(it) }
+            ?: throw ApiException(500, "操作失败")
+    }
+
+    fun commentMoment(
+        id: Long,
+        content: String,
+        msgType: String = "text",
+        mediaUrl: String = "",
+        replyToUserId: Int = 0,
+    ): Moment {
+        val body = JSONObject()
+            .put("content", content)
+            .put("msg_type", msgType)
+        if (mediaUrl.isNotBlank()) body.put("media_url", mediaUrl)
+        if (replyToUserId > 0) body.put("replyToUserId", replyToUserId)
+        val o = exec("/api/moments/$id/comments", "POST", body)
+        return o.optJSONObject("moment")?.let { parseMoment(it) }
+            ?: throw ApiException(500, "评论失败")
+    }
+
+    fun deleteMomentComment(momentId: Long, commentId: Long): Moment {
+        val o = exec("/api/moments/$momentId/comments/$commentId", "DELETE", JSONObject())
+        return o.optJSONObject("moment")?.let { parseMoment(it) }
+            ?: throw ApiException(500, "删除失败")
+    }
+
+    /* ------------------------------ 表情包 ------------------------------ */
+
+    fun searchStickers(keyword: String, page: Int = 1): List<Sticker> {
+        val o = exec("/api/stickers/search?q=${q(keyword)}&page=$page")
+        val arr = o.optJSONArray("items") ?: return emptyList()
+        return arr.toList().map { parseSticker(it) }
+    }
+
+    fun stickerFavs(): List<Sticker> {
+        val o = exec("/api/stickers/favs")
+        val arr = o.optJSONArray("items") ?: return emptyList()
+        return arr.toList().map { parseSticker(it) }
+    }
+
+    fun addStickerFav(url: String, label: String): List<Sticker> {
+        val o = exec(
+            "/api/stickers/favs", "POST",
+            JSONObject().put("url", url).put("label", label)
+        )
+        val arr = o.optJSONArray("items") ?: return emptyList()
+        return arr.toList().map { parseSticker(it) }
+    }
+
+    fun removeStickerFav(url: String): List<Sticker> {
+        val o = exec(
+            "/api/stickers/favs/remove", "POST",
+            JSONObject().put("url", url)
+        )
+        val arr = o.optJSONArray("items") ?: return emptyList()
+        return arr.toList().map { parseSticker(it) }
+    }
+
+    /* ------------------------------ 后台管理 ------------------------------ */
+
+    fun adminOverview(): AdminOverview = parseAdminOverview(exec("/api/admin/overview"))
+
+    fun adminUsers(keyword: String = ""): List<AdminUser> {
+        val path = if (keyword.isBlank()) "/api/admin/users" else "/api/admin/users?q=${q(keyword)}"
+        val o = exec(path)
+        val arr = o.optJSONArray("users") ?: return emptyList()
+        return arr.toList().map { parseAdminUser(it) }
+    }
+
+    fun adminBanUser(userId: Int, days: Int): AdminUser {
+        val o = exec("/api/admin/users/$userId/ban", "POST", JSONObject().put("days", days))
+        return o.optJSONObject("user")?.let { parseAdminUser(it) }
+            ?: throw ApiException(500, "操作失败")
+    }
+
+    fun adminUnbanUser(userId: Int): AdminUser {
+        val o = exec("/api/admin/users/$userId/unban", "POST", JSONObject())
+        return o.optJSONObject("user")?.let { parseAdminUser(it) }
+            ?: throw ApiException(500, "操作失败")
+    }
+
+    fun adminMuteUser(userId: Int, minutes: Int): AdminUser {
+        val o = exec("/api/admin/users/$userId/mute", "POST", JSONObject().put("minutes", minutes))
+        return o.optJSONObject("user")?.let { parseAdminUser(it) }
+            ?: throw ApiException(500, "操作失败")
+    }
+
+    fun adminUnmuteUser(userId: Int): AdminUser {
+        val o = exec("/api/admin/users/$userId/unmute", "POST", JSONObject())
+        return o.optJSONObject("user")?.let { parseAdminUser(it) }
+            ?: throw ApiException(500, "操作失败")
+    }
+
     /* ------------------------------ 实时 ------------------------------ */
 
     data class PollEvent(val type: String, val data: JSONObject)

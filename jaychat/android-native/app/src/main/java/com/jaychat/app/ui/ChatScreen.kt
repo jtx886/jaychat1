@@ -99,6 +99,7 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
     var actionMsg by remember { mutableStateOf<Message?>(null) }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
     var videoUrl by remember { mutableStateOf<String?>(null) }
+    var stickerOpen by remember { mutableStateOf(false) }
     var myRole by remember { mutableStateOf("member") }
 
     suspend fun pull(markRead: Boolean): List<Message> = withContext(Dispatchers.IO) {
@@ -296,6 +297,12 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
             ) {
                 Icon(Icons.Default.Add, contentDescription = "发送图片/视频", tint = TextSub)
             }
+            IconButton(
+                onClick = { stickerOpen = true },
+                enabled = !uploading && !sending
+            ) {
+                Text("😀", fontSize = 20.sp)
+            }
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
@@ -329,7 +336,8 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
             MenuRow("复制") {
                 sheetOpen = false
                 val text = when (m.type) {
-                    "text", "sticker" -> m.content
+                    "text" -> m.content
+                    "sticker" -> if (m.content.isBlank()) m.mediaUrl else m.content
                     "image" -> "[图片]"
                     "video" -> "[视频]"
                     else -> m.content
@@ -364,6 +372,34 @@ fun ChatScreen(conv: Conversation, me: User, vm: com.jaychat.app.MainViewModel, 
                 }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (stickerOpen) {
+        Dialog(
+            onDismissRequest = { stickerOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(Modifier.fillMaxSize().background(Bg)) {
+                StickerPicker(
+                    title = "发送表情",
+                    onBack = { stickerOpen = false },
+                    onPick = { s ->
+                        stickerOpen = false
+                        scope.launch {
+                            try {
+                                val m = withContext(Dispatchers.IO) {
+                                    Net.api.sendMessage(conv.type, conv.id, "sticker", "", s.url)
+                                }
+                                messages.add(m)
+                                Toast.makeText(ctx, "发送成功", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(ctx, "发送失败", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
+            }
         }
     }
 
@@ -491,8 +527,8 @@ private fun MessageRow(
                             .clip(RoundedCornerShape(14.dp))
                             .background(bubbleColor)
                             .combinedClickable(onClick = {}, onLongClick = onLongPress)
-                            .padding(horizontal = if (m.type == "image" || m.type == "video") 3.dp else 11.dp,
-                                vertical = if (m.type == "image" || m.type == "video") 3.dp else 8.dp)
+                            .padding(horizontal = if (m.type == "image" || m.type == "video" || m.type == "sticker") 3.dp else 11.dp,
+                                vertical = if (m.type == "image" || m.type == "video" || m.type == "sticker") 3.dp else 8.dp)
                     ) {
                         when (m.type) {
                             "image" -> AsyncImage(
@@ -526,6 +562,18 @@ private fun MessageRow(
                                     modifier = Modifier.size(44.dp)
                                 )
                             }
+                            "sticker" -> AsyncImage(
+                                model = mediaUrl(m.mediaUrl),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .size(120.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = onLongPress
+                                    )
+                            )
                             "forward" -> Text("[聊天记录]", color = TextMain, fontSize = 15.sp)
                             else -> Text(
                                 m.content,
