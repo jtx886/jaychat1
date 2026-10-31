@@ -503,6 +503,10 @@ route('GET', '#^/api/media$#', function ($params, $body) {
     $size = (int) filesize($full);
     $mime = jc_media_mime($full);
     header('Content-Type: ' . $mime);
+    // 声明 inline + 真实文件名：部分手机浏览器（MIUI/vivo/OPPO 自带浏览器、老版 WebView）
+    // 会依据文件名判断能否播放，只看到 .dat 就拒绝；带上 .mp4 文件名后可直接播放。
+    $fname = basename(str_replace('.dat', '', $full));
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $fname) . '"');
     header('Accept-Ranges: bytes');
     header('Cache-Control: public, max-age=604800');
     header('Access-Control-Allow-Origin: *');

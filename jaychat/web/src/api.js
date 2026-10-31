@@ -41,7 +41,9 @@ export function mediaUrl(u) {
   if (/^(https?:)?\/\//.test(u) || u.startsWith('data:') || u.startsWith('blob:')) return u;
   const clean = u.split('#')[0];
   if (clean.startsWith('/uploads/')) {
-    return getBase() + '/api/media?f=' + encodeURIComponent(clean.slice('/uploads/'.length));
+    // 保留路径里的 /（不要编码成 %2F）：部分主机的 WAF 会把 %2F 当成路径穿越直接拦截，
+    // 而且不少手机浏览器更愿意播放“看起来像视频文件”的地址。
+    return getBase() + '/api/media?f=' + encodeURI(clean.slice('/uploads/'.length));
   }
   return getBase() + u;
 }

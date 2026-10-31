@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, mediaUrl } from '../api.js';
-import { EMOJI_CATEGORIES, STICKER_HOT_KEYWORDS, parseSticker } from '../lib/emoji.js';
+import { EMOJI_CATEGORIES, parseSticker } from '../lib/emoji.js';
 import { Icon } from './icons.jsx';
 import { Sheet, ActionSheet, Spinner, toast } from './ui.jsx';
 import { TgsSticker, hasArt } from './Sticker.jsx';
@@ -137,12 +137,25 @@ function StickerTile({ item, isFav, onSend, onMenu }) {
 }
 
 /* ============================ 主面板 ============================ */
+const HISTORY_KEY = 'jc_sticker_history';
+const HISTORY_MAX = 12;
+
+function loadHistory() {
+  try {
+    const v = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).slice(0, HISTORY_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function EmojiPanel({ onEmoji, onSendSticker }) {
   const [tab, setTab] = useState('normal'); // normal | anim | mine
   const [cat, setCat] = useState(EMOJI_CATEGORIES[0].key);
 
   const [query, setQuery] = useState(''); // 已提交的搜索词
   const [input, setInput] = useState(''); // 输入框
+  const [history, setHistory] = useState(loadHistory); // 搜索历史（本地保存）
   const [sub, setSub] = useState('result'); // result | compose
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -171,6 +184,26 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
     loadFavs();
   }, [loadFavs]);
 
+  /* ---------- 搜索历史（本地保存，最多 12 条） ---------- */
+  const rememberSearch = useCallback((kw) => {
+    const q = String(kw || '').trim();
+    if (!q) return;
+    setHistory((list) => {
+      const next = [q, ...list.filter((x) => x !== q)].slice(0, HISTORY_MAX);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch {}
+  }, []);
+
   /* ---------- 搜索（分页拉取，与 soogif 网站结果条数一致） ---------- */
   const doSearch = async (kw) => {
     const q = String(kw ?? input ?? '').trim();
@@ -194,6 +227,7 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
       setMaxPage(d.max_page || 1);
       setBase(d.base || '');
       setTotal(d.total || 0);
+      rememberSearch(q);
     } catch (e) {
       toast(e.message, 'error');
       setResults([]);
@@ -401,12 +435,24 @@ export default function EmojiPanel({ onEmoji, onSendSticker }) {
               <span className="hint" style={{ marginLeft: 'auto' }}>“{query}”</span>
             </div>
           ) : (
-            <div className="chip-row" style={{ paddingTop: 2 }}>
-              {STICKER_HOT_KEYWORDS.map((k) => (
-                <span key={k} className="chip" onClick={() => doSearch(k)}>
-                  {k}
-                </span>
-              ))}
+            <div className="sticker-history">
+              <div className="sticker-history-head">
+                <span className="hint">搜索历史</span>
+                {history.length ? (
+                  <span className="chip sticker-history-clear" onClick={clearHistory}>清空</span>
+                ) : null}
+              </div>
+              {history.length ? (
+                <div className="chip-row" style={{ paddingTop: 2 }}>
+                  {history.map((k) => (
+                    <span key={k} className="chip" onClick={() => doSearch(k)}>
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="hint" style={{ padding: '2px 0 0' }}>暂无搜索历史</div>
+              )}
             </div>
           )}
 

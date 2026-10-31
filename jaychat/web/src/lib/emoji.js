@@ -59,11 +59,6 @@ export const EMOJI_CATEGORIES = [
 
 /* ============ 动画表情包：接入 soogif 在线资源（面板见 components/EmojiPanel.jsx） ============ */
 
-/** 热门搜索关键词（未输入时展示，点击即搜索） */
-export const STICKER_HOT_KEYWORDS = [
-  '哈哈', '比心', '加油', '晚安', '疑问', '点赞', '狗头', '谢谢', '无语', '开心', '委屈', '爱心',
-];
-
 /**
  * 解析历史贴纸消息内容。
  * 兼容旧版编码：stu|<art>（内联动画）与 stu|<anim>|<emoji>。

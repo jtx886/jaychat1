@@ -242,17 +242,36 @@ export function SmartImage({ src, alt = '', className, style, ...rest }) {
 }
 
 /* ============================ 视频播放器 ============================ */
+/** 根据媒体地址推断视频容器类型；服务端把 MOV/M4V 也统一按 video/mp4 输出 */
+function videoMimeOf(u) {
+  const s = String(u || '').split('?')[0].split('#')[0].toLowerCase();
+  const name = s.endsWith('.dat') ? s.slice(0, -4) : s;
+  if (name.endsWith('.webm')) return 'video/webm';
+  if (name.endsWith('.ogv')) return 'video/ogg';
+  if (name.endsWith('.mkv')) return 'video/x-matroska';
+  if (name.endsWith('.3gp')) return 'video/3gpp';
+  if (name.endsWith('.avi')) return 'video/x-msvideo';
+  if (name.endsWith('.flv')) return 'video/x-flv';
+  if (name.endsWith('.wmv')) return 'video/x-ms-wmv';
+  if (name.endsWith('.mpeg') || name.endsWith('.mpg')) return 'video/mpeg';
+  return 'video/mp4';
+}
+
 /** 视频播放：
  *  - 统一走 /api/media（正确的 Content-Type + Range 支持）
+ *  - 用 <source type> 显式声明容器类型：部分系统浏览器只看 URL 后缀，
+ *    视频落盘名以 .dat 结尾会被判为未知格式直接拒绝播放
  *  - /api/media 失效时自动降级 /uploads 直链重试
  *  - 解码失败（典型是 HEVC/H.265 编码）时明确提示，并提供「用系统播放器打开」
- *  - 仍失败显示「视频加载失败 + 重试」，绝不留一块黑屏
+ *  - 长时间连元数据都拿不到也给出失败提示，绝不留一块黑屏
  */
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
   // null=正常；'network'=下载/网络问题；'decode'=编码或格式不被当前浏览器支持
   const [err, setErr] = useState(null);
   const [nonce, setNonce] = useState(0);
   const [useDirect, setUseDirect] = useState(false);
+  const videoRef = useRef(null);
+  const failRef = useRef(() => {});
   const primary = mediaUrl(src);
   useEffect(() => {
     setErr(null);
@@ -271,6 +290,8 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       return '';
     }
   })();
+  const base = useDirect && direct ? direct : primary;
+  const url = nonce ? base + (base.includes('?') ? '&' : '?') + 'r=' + nonce : base;
   const openUrl = (() => {
     const u = direct || primary;
     if (!u) return '';
@@ -280,6 +301,35 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       return u;
     }
   })();
+  failRef.current = (kind) => {
+    if (!useDirect && direct) {
+      setUseDirect(true);
+      setNonce(Date.now());
+      return;
+    }
+    if (kind === 'decode' && url) {
+      // 确认文件确实能取到：取不到就是网络/文件问题，而不是编码问题，避免误导
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
+      fetch(url, { headers: { Range: 'bytes=0-1' }, cache: 'no-store', signal: ctrl?.signal })
+        .then((r) => setErr(r.ok || r.status === 206 ? 'decode' : 'network'))
+        .catch(() => setErr('network'))
+        .finally(() => {
+          if (timer) clearTimeout(timer);
+        });
+      return;
+    }
+    setErr(kind);
+  };
+  // 兜底：30 秒仍无任何元数据、且已不在下载状态（主机会话被丢弃）才判定失败
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const v = videoRef.current;
+      // networkState=2 表示仍在下载（非 faststart 的视频可能要下完才拿到元数据），不能误判
+      if (v && !v.error && v.readyState === 0 && v.networkState !== 2) failRef.current('network');
+    }, 30000);
+    return () => clearTimeout(t);
+  }, [url]);
   if (err) {
     return (
       <div
@@ -313,11 +363,15 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       </div>
     );
   }
-  const base = useDirect && direct ? direct : primary;
-  const url = nonce ? base + (base.includes('?') ? '&' : '?') + 'r=' + nonce : base;
+  const onMediaError = (e) => {
+    // MediaError: 3=解码失败 4=格式/编码不支持 → 换播放器也无法解码，给出明确提示
+    const code = e?.currentTarget?.error?.code;
+    failRef.current(code === 3 || code === 4 ? 'decode' : 'network');
+  };
   return (
     <video
-      src={url}
+      key={url}
+      ref={videoRef}
       className={className}
       style={style}
       controls
@@ -325,21 +379,12 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
       playsInline
       webkit-playsinline="true"
       x5-playsinline="true"
-      x5-video-player-type="h5"
       preload="metadata"
       onClick={onClick}
-      onError={(e) => {
-        // MediaError: 3=解码失败 4=格式/编码不支持 → 换播放器也无法解码，给出明确提示
-        const code = e?.currentTarget?.error?.code;
-        const kind = code === 3 || code === 4 ? 'decode' : 'network';
-        if (!useDirect && direct) {
-          setUseDirect(true);
-          setNonce(Date.now());
-        } else {
-          setErr(kind);
-        }
-      }}
-    />
+      onError={onMediaError}
+    >
+      <source src={url} type={videoMimeOf(url)} onError={onMediaError} />
+    </video>
   );
 }
 
