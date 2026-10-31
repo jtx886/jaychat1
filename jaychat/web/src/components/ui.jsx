@@ -257,19 +257,29 @@ function videoMimeOf(u) {
   return 'video/mp4';
 }
 
-/** 视频播放：
+/** 视频播放（内置播放器，不依赖浏览器自带控制条）：
  *  - 统一走 /api/media（正确的 Content-Type + Range 支持）
  *  - 用 <source type> 显式声明容器类型：部分系统浏览器只看 URL 后缀，
  *    视频落盘名以 .dat 结尾会被判为未知格式直接拒绝播放
- *  - /api/media 失效时自动降级 /uploads 直链重试
- *  - 解码失败（典型是 HEVC/H.265 编码）时明确提示，并提供「用系统播放器打开」
- *  - 长时间连元数据都拿不到也给出失败提示，绝不留一块黑屏
+ *  - /api/media 失效时自动降级 /uploads 直链重试（直链由 .htaccess 强制成视频类型）
+ *  - 自带播放/暂停、进度条、时间显示，避免系统浏览器控制条不渲染导致「只有黑块」
+ *  - 解码失败（典型是 HEVC/H.265 编码）时明确提示，并提供下载入口
  */
+function clipTime(sec) {
+  const n = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(n / 60);
+  const s = n % 60;
+  return m + ':' + (s < 10 ? '0' + s : String(s));
+}
+
 export function VideoPlayer({ src, className, style, autoPlay = false, onClick }) {
   // null=正常；'network'=下载/网络问题；'decode'=编码或格式不被当前浏览器支持
   const [err, setErr] = useState(null);
   const [nonce, setNonce] = useState(0);
   const [useDirect, setUseDirect] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [dur, setDur] = useState(0);
+  const [cur, setCur] = useState(0);
   const videoRef = useRef(null);
   const failRef = useRef(() => {});
   const primary = mediaUrl(src);
@@ -277,6 +287,9 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
     setErr(null);
     setNonce(0);
     setUseDirect(false);
+    setPlaying(false);
+    setDur(0);
+    setCur(0);
   }, [primary]);
   // 从 /api/media?f=xxx 反解出 /uploads/xxx 直链，作为降级地址
   const direct = (() => {
@@ -341,13 +354,13 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
         <span>{err === 'decode' ? '当前浏览器不支持该视频编码' : '视频加载失败'}</span>
         <span className="video-fail-hint">
           {err === 'decode'
-            ? '视频可能是 HEVC/H.265 编码，请用手机系统播放器打开'
+            ? '视频可能是 HEVC/H.265 编码，网页播放器无法解码；可下载后在本机相册播放'
             : '请检查网络后重试'}
         </span>
         <div className="video-fail-actions">
           {openUrl && (
-            <a className="btn btn-sm" href={openUrl} target="_blank" rel="noreferrer">
-              用系统播放器打开
+            <a className="btn btn-sm" href={openUrl} download>
+              下载视频
             </a>
           )}
           <button
@@ -368,23 +381,81 @@ export function VideoPlayer({ src, className, style, autoPlay = false, onClick }
     const code = e?.currentTarget?.error?.code;
     failRef.current(code === 3 || code === 4 ? 'decode' : 'network');
   };
+  const toggle = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      const p = v.play();
+      if (p && p.catch) p.catch(() => {});
+    } else {
+      v.pause();
+    }
+  };
+  const seek = (e) => {
+    const v = videoRef.current;
+    const t = Number(e.target.value) || 0;
+    setCur(t);
+    if (v) {
+      try {
+        v.currentTime = t;
+      } catch {}
+    }
+  };
   return (
-    <video
-      key={url}
-      ref={videoRef}
-      className={className}
+    <div
+      className={'vp' + (className ? ' ' + className : '')}
       style={style}
-      controls
-      autoPlay={autoPlay}
-      playsInline
-      webkit-playsinline="true"
-      x5-playsinline="true"
-      preload="metadata"
-      onClick={onClick}
-      onError={onMediaError}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(e);
+      }}
     >
-      <source src={url} type={videoMimeOf(url)} onError={onMediaError} />
-    </video>
+      <video
+        key={url}
+        ref={videoRef}
+        className="vp-video"
+        autoPlay={autoPlay}
+        playsInline
+        webkit-playsinline="true"
+        x5-playsinline="true"
+        preload="metadata"
+        controls={false}
+        onClick={toggle}
+        onError={onMediaError}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setCur(0);
+        }}
+        onDurationChange={(e) => setDur(Number(e.currentTarget.duration) || 0)}
+        onLoadedMetadata={(e) => setDur(Number(e.currentTarget.duration) || 0)}
+        onTimeUpdate={(e) => setCur(Number(e.currentTarget.currentTime) || 0)}
+      >
+        <source src={url} type={videoMimeOf(url)} onError={onMediaError} />
+      </video>
+      {!playing ? (
+        <button type="button" className="vp-big" aria-label="播放" onClick={toggle}>
+          <Icon name="play" size={24} filled />
+        </button>
+      ) : null}
+      <div className="vp-ctrl" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="vp-btn" aria-label={playing ? '暂停' : '播放'} onClick={toggle}>
+          <Icon name={playing ? 'pause' : 'play'} size={13} filled />
+        </button>
+        <span className="vp-time">{clipTime(cur)}</span>
+        <input
+          type="range"
+          className="vp-range"
+          min="0"
+          max={dur || 0}
+          step="0.1"
+          value={Math.min(cur, dur || 0)}
+          onChange={seek}
+        />
+        <span className="vp-time">{clipTime(dur)}</span>
+      </div>
+    </div>
   );
 }
 

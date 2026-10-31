@@ -55,7 +55,7 @@ function empty_obj()
  *
  * 部署包不再包含 uploads/ 目录（避免个别主机的解压工具「先清空再写入」把用户
  * 上传的头像 / 动态图片 / 视频一起删掉）；目录改由这里在运行时创建。
- * 只在缺失时写文件，正常请求几乎零开销。
+ * .htaccess 缺失、或还是旧版本（没有视频直链的 ForceType）时自动重写。
  */
 function jc_ensure_uploads()
 {
@@ -64,11 +64,26 @@ function jc_ensure_uploads()
         @mkdir($dir, 0777, true);
     }
     $ht = $dir . '/.htaccess';
-    if (is_dir($dir) && !is_file($ht)) {
-        @file_put_contents($ht, <<<'HT'
+    if (!is_dir($dir)) {
+        return;
+    }
+    $old = is_file($ht) ? (string) @file_get_contents($ht) : '';
+    if ($old !== '' && strpos($old, 'ForceType video/mp4') !== false) {
+        return;
+    }
+    @file_put_contents($ht, <<<'HT'
 # 上传目录：禁止执行任何脚本，防止上传可执行文件被访问
 <FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|asp|aspx|jsp|sh|shtml|htaccess|svg)$">
   Require all denied
+</FilesMatch>
+
+# 视频文件落盘名以 .mp4.dat 结尾（规避个别主机按扩展名限制），
+# 直链访问时强制声明成视频类型：/api/media 万一不可用，浏览器降级到直链也能正常播放
+<FilesMatch "\.(mp4|mov|m4v)\.dat$">
+  ForceType video/mp4
+</FilesMatch>
+<FilesMatch "\.webm\.dat$">
+  ForceType video/webm
 </FilesMatch>
 
 # 禁止目录列出
@@ -80,6 +95,5 @@ Options -Indexes
   Header always set Content-Security-Policy "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
 </IfModule>
 HT
-        );
-    }
+    );
 }

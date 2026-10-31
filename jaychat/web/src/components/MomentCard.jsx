@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Avatar, ActionSheet, SmartImage, VideoPlayer, toast } from '../components/ui.jsx';
+import { Avatar, ActionSheet, Sheet, SmartImage, VideoPlayer, toast } from '../components/ui.jsx';
 import { Icon, IconTile } from '../components/icons.jsx';
 import { fullTime } from '../lib/time.js';
 import { useApp } from '../App.jsx';
@@ -9,11 +9,37 @@ import { useApp } from '../App.jsx';
 export default function MomentCard({ moment, onOpen, onLike, showCommentPreview = true, onDeleted }) {
   const { openUser, push } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
+  // 编辑文案：null=未打开；字符串=正在编辑的内容
+  const [editText, setEditText] = useState(null);
+  const [editBusy, setEditBusy] = useState(false);
+  // 保存后本地立即生效（WebSocket 事件到达前也不会闪回旧文案）
+  const [localText, setLocalText] = useState(null);
   const likeBusy = useRef(false);
   const m = moment;
+  const text = localText !== null ? localText : m.text;
   const media = (m.media || []).filter((x) => x.url);
   const nCls = media.length === 1 ? 'n1' : media.length === 2 || media.length === 4 ? 'n2' : 'n3';
   const visLabel = { public: '公开', friends: '好友可见', private: '私密', custom: '指定可见', exclude: '部分不可见' }[m.visibility];
+
+  const saveEdit = async () => {
+    if (editBusy) return;
+    const next = String(editText ?? '').trim();
+    if (next === String(text ?? '').trim()) {
+      setEditText(null);
+      return;
+    }
+    setEditBusy(true);
+    try {
+      const d = await api.patch(`/api/moments/${m.id}`, { content: next });
+      setLocalText(d?.moment?.text ?? next);
+      toast('文案已更新');
+      setEditText(null);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setEditBusy(false);
+    }
+  };
 
   const doDelete = async () => {
     try {
@@ -45,7 +71,7 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
         ) : null}
       </div>
 
-      {m.text ? <div className="moment-text">{m.text}</div> : null}
+      {text ? <div className="moment-text">{text}</div> : null}
 
       {media.length ? (
         <div className={'moment-media ' + nCls}>
@@ -118,6 +144,14 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
         title="动态操作"
         actions={[
           {
+            icon: <IconTile name="pencil" tone="sky" box={34} size={18} />,
+            label: '编辑文案',
+            onClick: () => {
+              setMenuOpen(false);
+              setEditText(String(m.content ?? m.text ?? ''));
+            },
+          },
+          {
             icon: <IconTile name="lock" tone="violet" box={34} size={18} />,
             label: '编辑可见范围',
             onClick: () => push('momentVisibility', { momentId: m.id }),
@@ -130,6 +164,25 @@ export default function MomentCard({ moment, onOpen, onLike, showCommentPreview 
           },
         ]}
       />
+
+      <Sheet open={editText !== null} onClose={() => (editBusy ? null : setEditText(null))} title="编辑文案">
+        <textarea
+          className="input"
+          rows={5}
+          maxLength={2000}
+          placeholder="写点什么…"
+          value={editText ?? ''}
+          onChange={(e) => setEditText(e.target.value)}
+          style={{ resize: 'none', lineHeight: 1.6 }}
+        />
+        <div className="hint" style={{ textAlign: 'right', marginTop: 4 }}>{(editText ?? '').length}/2000</div>
+        <div className="flex gap8" style={{ marginTop: 10 }}>
+          <button className="btn btn-block" onClick={() => setEditText(null)} disabled={editBusy}>取消</button>
+          <button className="btn btn-primary btn-block" onClick={saveEdit} disabled={editBusy}>
+            {editBusy ? '保存中…' : '保存'}
+          </button>
+        </div>
+      </Sheet>
     </div>
   );
 }

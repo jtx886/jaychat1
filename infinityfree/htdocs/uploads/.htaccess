@@ -3,6 +3,15 @@
   Require all denied
 </FilesMatch>
 
+# 视频文件落盘名以 .mp4.dat 结尾（规避个别主机按扩展名限制），
+# 直链访问时强制声明成视频类型：/api/media 万一不可用，浏览器降级到直链也能正常播放
+<FilesMatch "\.(mp4|mov|m4v)\.dat$">
+  ForceType video/mp4
+</FilesMatch>
+<FilesMatch "\.webm\.dat$">
+  ForceType video/webm
+</FilesMatch>
+
 # 禁止目录列出
 Options -Indexes
 

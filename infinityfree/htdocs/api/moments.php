@@ -109,7 +109,7 @@ route('GET', '#^/api/moments/(\d+)$#', function ($params, $body) {
     return array(200, array('moment' => shape_moment($m, $uid)));
 });
 
-// 修改动态可见范围
+// 修改动态：文案 / 可见范围
 route('PATCH', '#^/api/moments/(\d+)$#', function ($params, $body) {
     $uid = require_auth();
     $id = (int) $params[0];
@@ -120,18 +120,38 @@ route('PATCH', '#^/api/moments/(\d+)$#', function ($params, $body) {
     if ((int) $m['author_id'] !== (int) $uid) {
         return array(403, array('error' => '只能修改自己的动态'));
     }
-    $visibility = isset($body['visibility']) ? $body['visibility'] : null;
-    $allowIds = (isset($body['allowIds']) && is_array($body['allowIds'])) ? $body['allowIds'] : array();
-    $denyIds = (isset($body['denyIds']) && is_array($body['denyIds'])) ? $body['denyIds'] : array();
-    if (!in_array($visibility, JC_VISIBILITIES, true)) {
-        return array(400, array('error' => '可见范围不合法'));
+    $changed = false;
+
+    // 编辑文案（支持清空）
+    if (array_key_exists('content', $body)) {
+        $content = trim((string) $body['content']);
+        if (mb_strlen($content, 'UTF-8') > 2000) {
+            return array(400, array('error' => '文案太长，最多 2000 字'));
+        }
+        db_run('UPDATE `moments` SET `content` = ? WHERE `id` = ?', array($content, $id));
+        $changed = true;
     }
-    $allow = $visibility === 'custom' ? array_map('intval', $allowIds) : array();
-    $deny = $visibility === 'exclude' ? array_map('intval', $denyIds) : array();
-    if (($visibility === 'custom' || $visibility === 'exclude') && empty($allow) && empty($deny)) {
-        return array(400, array('error' => '请选择好友'));
+
+    // 可见范围（只有显式传入时才校验，避免只改文案时被误判为不合法）
+    $visibility = (isset($body['visibility']) && $body['visibility'] !== null) ? $body['visibility'] : null;
+    if ($visibility !== null) {
+        $allowIds = (isset($body['allowIds']) && is_array($body['allowIds'])) ? $body['allowIds'] : array();
+        $denyIds = (isset($body['denyIds']) && is_array($body['denyIds'])) ? $body['denyIds'] : array();
+        if (!in_array($visibility, JC_VISIBILITIES, true)) {
+            return array(400, array('error' => '可见范围不合法'));
+        }
+        $allow = $visibility === 'custom' ? array_map('intval', $allowIds) : array();
+        $deny = $visibility === 'exclude' ? array_map('intval', $denyIds) : array();
+        if (($visibility === 'custom' || $visibility === 'exclude') && empty($allow) && empty($deny)) {
+            return array(400, array('error' => '请选择好友'));
+        }
+        db_run('UPDATE `moments` SET `visibility` = ?, `allow_ids` = ?, `deny_ids` = ? WHERE `id` = ?', array($visibility, jc_json($allow), jc_json($deny), $id));
+        $changed = true;
     }
-    db_run('UPDATE `moments` SET `visibility` = ?, `allow_ids` = ?, `deny_ids` = ? WHERE `id` = ?', array($visibility, jc_json($allow), jc_json($deny), $id));
+
+    if (!$changed) {
+        return array(400, array('error' => '没有需要修改的内容'));
+    }
     $shaped = shape_moment(db_one('SELECT * FROM `moments` WHERE `id` = ?', array($id)), $uid);
     $uids = array_values(array_unique(array_merge(array($uid), friend_ids($uid))));
     event_to_users($uids, 'moment:update', $shaped);
