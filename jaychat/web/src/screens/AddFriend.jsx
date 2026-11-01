@@ -219,7 +219,7 @@ export default function AddFriendScreen({ tab = 'search' }) {
                   {gSearching ? '…' : '搜索'}
                 </button>
               </div>
-              <div className="hint" style={{ marginTop: 8 }}>支持群名称模糊搜索，或群 ID 精确查找（可直接粘贴「群 ID：12」）；申请后需群主 / 管理员审核</div>
+              <div className="hint" style={{ marginTop: 8 }}>支持群名称模糊搜索，或群 ID 精确查找</div>
             </div>
 
             {gSearching ? <Loading /> : null}
