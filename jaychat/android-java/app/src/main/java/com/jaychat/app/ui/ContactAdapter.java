@@ -74,18 +74,23 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.VH> {
     public void onBindViewHolder(@NonNull VH h, int position) {
         Item it = data.get(position);
         if (it.type == TYPE_SECTION) {
-            h.section.setText(it.section);
-            h.section.setVisibility(View.VISIBLE);
-            h.avatar.setVisibility(View.GONE);
-            h.name.setVisibility(View.GONE);
-            h.sub.setVisibility(View.GONE);
+            if (h.section != null) {
+                h.section.setText(it.section);
+                h.section.setVisibility(View.VISIBLE);
+            }
+            if (h.avatar != null) h.avatar.setVisibility(View.GONE);
+            if (h.name != null) h.name.setVisibility(View.GONE);
+            if (h.sub != null) h.sub.setVisibility(View.GONE);
+            if (h.arrow != null) h.arrow.setVisibility(View.GONE);
             h.itemView.setOnClickListener(null);
+            h.itemView.setOnLongClickListener(null);
             return;
         }
-        h.section.setVisibility(View.GONE);
-        h.avatar.setVisibility(View.VISIBLE);
-        h.name.setVisibility(View.VISIBLE);
-        h.sub.setVisibility(View.VISIBLE);
+        if (h.section != null) h.section.setVisibility(View.GONE);
+        if (h.avatar != null) h.avatar.setVisibility(View.VISIBLE);
+        if (h.name != null) h.name.setVisibility(View.VISIBLE);
+        if (h.sub != null) h.sub.setVisibility(View.VISIBLE);
+        if (h.arrow != null) h.arrow.setVisibility(View.VISIBLE);
         if (it.type == TYPE_GROUP) {
             h.avatar.bind(it.group.name, it.group.avatar, null);
             h.name.setText(it.group.name);

@@ -60,7 +60,7 @@ public class MeFragment extends Fragment {
         root.findViewById(R.id.btnLogout).setOnClickListener(v ->
                 Ui.confirm(getContext(), "退出登录", "确定退出当前账号？", this::logout));
 
-        tvVersion.setText("Jay Chat 原生版 3.0.0（Java）");
+        tvVersion.setText("Jay Chat 原生版 3.0.1（Java）");
         return root;
     }
 
