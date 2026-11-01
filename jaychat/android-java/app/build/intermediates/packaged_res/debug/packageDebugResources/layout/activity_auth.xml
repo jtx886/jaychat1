@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_main"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="64dp"
+        android:paddingBottom="40dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Jay Chat"
+            android:textColor="@color/text"
+            android:textSize="36sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="聊天、动态、表情，一个就够"
+            android:textColor="@color/text2"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="30dp"
+            android:background="@drawable/card_glass"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:id="@+id/tvMode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="登录账号"
+                android:textColor="@color/text"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/etAccount"
+                style="@style/Edit"
+                android:hint="用户名或邮箱"
+                android:inputType="text" />
+
+            <EditText
+                android:id="@+id/etPassword"
+                style="@style/Edit"
+                android:hint="密码"
+                android:inputType="textPassword" />
+
+            <LinearLayout
+                android:id="@+id/registerBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <EditText
+                    android:id="@+id/etEmail"
+                    style="@style/Edit"
+                    android:hint="邮箱"
+                    android:inputType="textEmailAddress" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/etCode"
+                        style="@style/Edit"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:hint="邮箱验证码"
+                        android:inputType="number" />
+
+                    <TextView
+                        android:id="@+id/btnCode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="50dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/btn_ghost"
+                        android:gravity="center"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:text="获取验证码"
+                        android:textColor="@color/brand2"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/etUsername"
+                    style="@style/Edit"
+                    android:hint="用户名（2-20 字）"
+                    android:inputType="text" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/btnSubmit"
+                style="@style/BrandButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="登录" />
+
+            <TextView
+                android:id="@+id/btnSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:padding="6dp"
+                android:text="没有账号？去注册"
+                android:textColor="@color/brand2"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvServer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:textColor="@color/text3"
+            android:textSize="11sp" />
+    </LinearLayout>
+</ScrollView>

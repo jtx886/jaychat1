@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg0">#05060D</color>
+    <color name="bg1">#0A0D1C</color>
+    <color name="bg2">#111634</color>
+    <color name="glass">#0DFFFFFF</color>
+    <color name="glass_strong">#16FFFFFF</color>
+    <color name="border">#1CFFFFFF</color>
+    <color name="border_strong">#33FFFFFF</color>
+    <color name="text">#EEF3FF</color>
+    <color name="text2">#AEB6CC</color>
+    <color name="text3">#6E7793</color>
+    <color name="brand">#6D8CFF</color>
+    <color name="brand2">#9DB6FF</color>
+    <color name="brand3">#6EE7FF</color>
+    <color name="grad_start">#7A5CFF</color>
+    <color name="grad_mid">#4F7BFF</color>
+    <color name="grad_end">#35C6FF</color>
+    <color name="danger">#FF5F7A</color>
+    <color name="danger_dark">#E0445F</color>
+    <color name="ok">#2FD88A</color>
+    <color name="warn">#FFB84D</color>
+    <color name="ai">#34D399</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="ripple">#33FFFFFF</color>
+</resources>

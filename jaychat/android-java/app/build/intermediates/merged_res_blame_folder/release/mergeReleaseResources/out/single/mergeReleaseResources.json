@@ -1,0 +1,318 @@
+[
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_notification.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_notification.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_fragment_contacts.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/fragment_contacts.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_play_circle.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_play_circle.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_logout.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_logout.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_admin.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_admin.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_chat.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_chat.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/color_nav_item_color.xml.flat",
+        "source": "com.jaychat.app-main-35:/color/nav_item_color.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_group_member.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_group_member.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_create_group.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_create_group.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_chat_input.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_chat_input.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_add_friend.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_add_friend.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_image.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_image.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_conversation.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_conversation.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_ripple_card.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_ripple_card.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_shield.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_shield.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_comment.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_comment.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_edit_profile.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_edit_profile.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_fragment_list.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/fragment_list.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_sticker_cell.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_sticker_cell.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_comment.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_comment.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_blacklist.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_blacklist.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_group_info.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_group_info.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_admin_user.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_admin_user.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_search.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_search.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_card_glass.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/card_glass.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_search_user.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_search_user.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_chat.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_chat.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_post_moment.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_post_moment.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_section.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_section.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_close.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_close.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_more.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_more.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_refresh.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_refresh.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_btn_ghost.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/btn_ghost.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_notifications.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_notifications.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_main.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_main.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_fragment_moments.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/fragment_moments.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_stickers.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_stickers.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_pill.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_pill.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_friend_request.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_friend_request.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_edit.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_edit.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_video.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_video.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_main.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_server_settings.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_server_settings.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_launcher.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_launcher.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_avatar.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_avatar.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_settings.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_settings.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bubble_other.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bubble_other.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_card_glass_sm.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/card_glass_sm.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_check.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_check.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_badge.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_badge.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_icon_btn.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_icon_btn.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_online.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_online.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_contact.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_contact.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_emoji.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_emoji.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_btn_brand.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/btn_brand.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_select_user.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_select_user.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_moment.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_moment.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_friend_info.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_friend_info.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_contacts.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_contacts.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_play.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_play.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_notifications.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_notifications.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_circle_letter.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/circle_letter.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_delete.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_delete.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_sheet_sticker.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/sheet_sticker.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_send.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_send.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_favorite.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_favorite.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bg_input.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bg_input.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/menu_menu_main.xml.flat",
+        "source": "com.jaychat.app-main-35:/menu/menu_main.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_bubble_me.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/bubble_me.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_person.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_person.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_blacklist.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_blacklist.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_user_moments.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_user_moments.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_add.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_add.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_moments.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_moments.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_fragment_me.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/fragment_me.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_auth.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_auth.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_activity_moment_detail.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/activity_moment_detail.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/layout_item_message.xml.flat",
+        "source": "com.jaychat.app-main-35:/layout/item_message.xml"
+    },
+    {
+        "merged": "com.jaychat.app-release-34:/drawable_ic_back.xml.flat",
+        "source": "com.jaychat.app-main-35:/drawable/ic_back.xml"
+    }
+]

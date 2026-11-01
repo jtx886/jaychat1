@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.JayChat" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/brand</item>
+        <item name="colorSecondary">@color/brand3</item>
+        <item name="colorSurface">@color/bg1</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="android:colorBackground">@color/bg0</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/bg0</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text2</item>
+        <item name="android:windowBackground">@drawable/bg_main</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="materialAlertDialogTheme">@style/Theme.JayChat.Dialog</item>
+        <item name="bottomSheetDialogTheme">@style/Theme.JayChat.BottomSheet</item>
+    </style>
+
+    <style name="Theme.JayChat.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/bg2</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text2</item>
+        <item name="shapeAppearanceOverlay">@style/Shape.Dialog</item>
+    </style>
+
+    <style name="Shape.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="Theme.JayChat.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="colorSurface">@color/bg2</item>
+    </style>
+</resources>

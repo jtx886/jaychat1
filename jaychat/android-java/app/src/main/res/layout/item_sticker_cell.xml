@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="3dp"
+    android:background="@drawable/card_glass_sm"
+    android:padding="4dp">
+
+    <ImageView
+        android:id="@+id/ivSticker"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter" />
+</FrameLayout>

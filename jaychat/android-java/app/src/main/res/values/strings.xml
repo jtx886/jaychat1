@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jay Chat</string>
+    <string name="tab_messages">消息</string>
+    <string name="tab_contacts">通讯录</string>
+    <string name="tab_moments">动态</string>
+    <string name="tab_me">我的</string>
+    <string name="send">发送</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="loading">加载中…</string>
+</resources>
