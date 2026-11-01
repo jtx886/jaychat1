@@ -35,6 +35,10 @@ function jc_default_config()
         // 上传大小上限（字节）。InfinityFree 单文件上限 10MB
         'UPLOAD_MAX_BYTES' => 10 * 1024 * 1024,
 
+        // 视频单独上限（字节）：视频走分片上传，不吃单请求限制，默认 100MB。
+        // 即使 config.local.php 没写这一项，也会按这里的默认值生效。
+        'VIDEO_MAX_BYTES' => 100 * 1024 * 1024,
+
         // ---- 邮件（163 SMTP，SSL 465）----
         // 用于注册/找回密码验证码。可在 config.local.php 覆盖。
         'SMTP_HOST' => 'smtp.163.com',
@@ -66,10 +70,10 @@ function jc_config($key = null)
 
         // 1) 环境变量覆盖
         $boolKeys = array('DEV_MODE', 'ALLOW_DEV_CODE');
-        $intKeys = array('UPLOAD_MAX_BYTES', 'SMTP_PORT');
+        $intKeys = array('UPLOAD_MAX_BYTES', 'VIDEO_MAX_BYTES', 'SMTP_PORT');
         $envKeys = array(
             'DB_DRIVER', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS',
-            'DB_PATH', 'JWT_SECRET', 'DEV_MODE', 'ALLOW_DEV_CODE', 'UPLOAD_MAX_BYTES',
+            'DB_PATH', 'JWT_SECRET', 'DEV_MODE', 'ALLOW_DEV_CODE', 'UPLOAD_MAX_BYTES', 'VIDEO_MAX_BYTES',
             'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'SMTP_FROM_NAME',
             'AI_URL', 'AI_KEY', 'AI_MODEL', 'AI_NAME', 'AI_AVATAR', 'ADMIN_EMAILS',
         );

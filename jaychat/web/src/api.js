@@ -82,6 +82,30 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 共享主机的「人机验证」页：接口返回 text/html（200）时说明当前 IP 的验证 Cookie
+ * 已失效。fetch 不会执行验证脚本，只能让页面整体跳转一次，由浏览器完成验证后
+ * 再回来，否则所有请求都会莫名失败（表现为「上传失败 / 发送失败」）。
+ * 返回 true 表示已触发一次刷新。
+ */
+function handleChallengePage(res) {
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (!ct.includes('text/html')) return false;
+  try {
+    if (!sessionStorage.getItem('jc_challenge_reload')) {
+      sessionStorage.setItem('jc_challenge_reload', '1');
+      window.location.reload();
+    }
+  } catch {}
+  return true;
+}
+
+function clearChallengeFlag() {
+  try {
+    sessionStorage.removeItem('jc_challenge_reload');
+  } catch {}
+}
+
 export async function http(path, { method = 'GET', body, token, raw, timeout } = {}) {
   const headers = {};
   const t = token ?? tokenStore.get();
@@ -104,6 +128,9 @@ export async function http(path, { method = 'GET', body, token, raw, timeout } =
     if (timer) clearTimeout(timer);
   }
   if (raw) return res;
+  if (handleChallengePage(res)) {
+    throw new ApiError('正在验证访问权限，请稍后重试', 0);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     // 后端未安装（PHP 版首次部署）→ 自动跳转到一键安装向导
@@ -114,6 +141,7 @@ export async function http(path, { method = 'GET', body, token, raw, timeout } =
     }
     throw new ApiError(data.error || `请求失败(${res.status})`, res.status);
   }
+  clearChallengeFlag();
   return data;
 }
 
@@ -137,7 +165,7 @@ export const api = {
 const UPLOAD_TIMEOUT = 180000;
 // 单片 1.5MB：线上 post_max_size 实测约 10MB，1.5MB 绝对安全且请求数比 512KB 少 2/3
 const CHUNK_SIZE = 1536 * 1024;
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 // 单次请求安全的体积上限：免费主机 upload_max_filesize 通常只有 2MB，
 // 超过这个值直接走分片，避免先发一次注定失败的大请求。
 const SINGLE_MAX = 1200 * 1024;
@@ -261,9 +289,13 @@ async function uploadDirect(file, kind, mode) {
   } finally {
     if (timer) clearTimeout(timer);
   }
+  if (handleChallengePage(res)) {
+    throw new ApiError('正在验证访问权限，请稍后重试', 0);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error || `上传失败(${res.status})`, res.status);
   if (!data || !data.url) throw new ApiError('上传失败：服务器未返回文件地址', 0);
+  clearChallengeFlag();
   return data;
 }
 
@@ -300,8 +332,12 @@ async function uploadChunked(file, kind) {
     } finally {
       if (timer) clearTimeout(timer);
     }
+    if (handleChallengePage(res)) {
+      throw new ApiError('正在验证访问权限，请稍后重试', 0);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(data.error || `上传失败(${res.status})`, res.status);
+    clearChallengeFlag();
     return data;
   };
 
@@ -385,7 +421,7 @@ async function uploadFile(file, kind) {
   }
   const prepared = k === 'image' ? await compressImage(file) : file;
   if (prepared.size > MAX_UPLOAD_BYTES) {
-    throw new ApiError('文件超过 10MB，请选择更小的文件（视频请先裁剪）', 400);
+    throw new ApiError('文件超过 100MB，请选择更小的文件（视频请先裁剪）', 400);
   }
   // 上传期间暂停长轮询：免费主机 PHP worker 极少，8s 长轮询会一直占着一个 worker，
   // 上传请求因此被主机直接丢弃（表现为「网络连接被中断」）。上传结束立即恢复。

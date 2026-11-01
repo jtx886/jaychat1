@@ -18,6 +18,17 @@ function mentionsAi(text, aiName) {
   return !!aiName && s.includes('@' + aiName);
 }
 
+/** 每条消息的客户端唯一 id：服务端据此去重，网络抖动/重复提交也不会多出一条 */
+function newClientId() {
+  try {
+    const b = new Uint8Array(8);
+    (globalThis.crypto || window.crypto).getRandomValues(b);
+    return Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return Math.random().toString(16).slice(2, 18);
+  }
+}
+
 export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const app = useApp();
   const { me, presence, push, back, refreshConversations, openConvRef } = app;
@@ -59,6 +70,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   const scrollRef = useRef(null);
   const textRef = useRef('');
   const inputRef = useRef(null);
+  const sendLock = useRef(false);
+  const mediaLock = useRef(false);
   const rowRefs = useRef({});
   const convKey = `${convType}_${convId}`;
   const isGroup = convType === 'group';
@@ -499,18 +512,22 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   /* ---------- 发送 ---------- */
   const sendText = async (content, msgType = 'text', reply = replyMsg) => {
     let body = String(content || '').trim();
-    if (!body) return;
+    if (!body || sendLock.current) return;
     // 群聊中回复引用他人消息时，自动 @ 对方（与微信/QQ 群回复一致）
     if (isGroup && reply && msgType === 'text' && reply.sender_id !== me.id) {
       const nm = reply.sender?.username;
       if (nm && !body.startsWith(`@${nm}`)) body = `@${nm} ${body}`;
     }
+    // 网络慢时「发送」按钮/回车很容易被连按两次：立刻锁定并清空输入框，
+    // 配合服务端 clientId 去重，确保同一条内容只会入库一次。
+    sendLock.current = true;
+    setText('');
+    textRef.current = '';
+    const payload = { convType, convId, msg_type: msgType, content: body, clientId: newClientId() };
+    if (reply?.id) payload.reply_to = reply.id;
     try {
-      const payload = { convType, convId, msg_type: msgType, content: body };
-      if (reply?.id) payload.reply_to = reply.id;
       const d = await api.post('/api/messages', payload);
       setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
-      setText('');
       setReplyMsg(null);
       // 发言时用户就在会话内：把已有的 @ 一并标记为已读，避免发完消息又出现「有人@我」
       if (isGroup && lastMentionId) {
@@ -540,7 +557,12 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         }
       }
     } catch (e) {
+      // 发送失败：把内容放回输入框，方便直接重试
+      setText(body);
+      textRef.current = body;
       toast(e.message, 'error');
+    } finally {
+      sendLock.current = false;
     }
   };
 
@@ -555,7 +577,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         finalUrl = up.url;
       }
       if (!finalUrl) return;
-      const payload = { convType, convId, msg_type: 'sticker', content: label || '', media_url: finalUrl };
+      const payload = { convType, convId, msg_type: 'sticker', content: label || '', media_url: finalUrl, clientId: newClientId() };
       if (reply?.id) payload.reply_to = reply.id;
       const d = await api.post('/api/messages', payload);
       setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
@@ -566,13 +588,13 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     }
   };
 
-  const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
+  const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
 
   const pickFiles = (files) => {
     const list = Array.from(files || []);
     const ok = list.filter((f) => f.size <= MAX_MEDIA_BYTES);
     if (ok.length < list.length) {
-      toast('文件超过 10MB：免费主机上传后会无法保存/播放，请先压缩再发送', 'error');
+      toast('文件超过 100MB，请选择更小的文件', 'error');
     }
     if (!ok.length) return;
     setPendingFiles(ok.map((f) => ({ file: f, url: URL.createObjectURL(f), type: isVideoFile(f) ? 'video' : 'image' })));
@@ -582,7 +604,8 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
   };
 
   const doSendMedia = async () => {
-    if (!pendingFiles.length) return;
+    if (!pendingFiles.length || mediaLock.current) return;
+    mediaLock.current = true;
     const burnSec = Math.min(Math.max(Number(oneTimeSec) || 5, 1), 300);
     setSending(true);
     setPanel(null);
@@ -593,6 +616,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
         const d = await api.post('/api/messages', {
           convType, convId, msg_type: up.kind === 'video' ? 'video' : 'image',
           media_url: up.url, media_thumb: '', one_time: oneTime, burn_sec: burnSec,
+          clientId: newClientId(),
         });
         setMessages((list) => (list.some((x) => x.id === d.message.id) ? list : [...list, d.message]));
       });
@@ -601,6 +625,7 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
     } catch (e) {
       toast('发送失败', 'error');
     } finally {
+      mediaLock.current = false;
       setSending(false);
       setPendingFiles([]);
       setOneTime(false);
@@ -1156,6 +1181,9 @@ export default function ChatScreen({ convType, convId, title, isOfficial }) {
             onChange={onInputChange}
             onKeyDown={(e) => {
               if (handleMentionBackspace(e)) return;
+              // 中文输入法选词时按 Enter 会带上 isComposing/keyCode 229，
+              // 此时不能发送，否则选完词再回车就会连着发出两条。
+              if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
               if (e.key === 'Enter' && !e.shiftKey && !mentionOpen) {
                 e.preventDefault();
                 sendText(text);

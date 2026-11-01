@@ -119,6 +119,7 @@ if (!$installed && $isPost) {
             . "    'DEV_MODE' => true,\n"
             . "    'ALLOW_DEV_CODE' => true,\n"
             . "    'UPLOAD_MAX_BYTES' => 10 * 1024 * 1024,\n"
+            . "    'VIDEO_MAX_BYTES' => 100 * 1024 * 1024,\n"
             . ");\n";
         if (@file_put_contents($configFile, $cfg) === false) {
             $errors[] = '写入 lib/config.local.php 失败。';

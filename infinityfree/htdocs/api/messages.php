@@ -256,19 +256,26 @@ function jc_video_is_hevc($file)
 }
 
 /**
+ * 按类型返回单文件体积上限（字节），0 表示不限制。
+ * 图片走一次请求，受主机 upload_max_filesize 约束；视频走分片合并，
+ * 用 VIDEO_MAX_BYTES（默认 100MB），且不低于通用上限。
+ */
+function jc_upload_max_bytes($kind)
+{
+    $base = (int) jc_config('UPLOAD_MAX_BYTES');
+    if ($kind === 'video') {
+        $video = (int) jc_config('VIDEO_MAX_BYTES');
+        return max($base, $video);
+    }
+    return $base;
+}
+
+/**
  * 把已落地到临时路径的文件校验并保存到 uploads/YYYYMM/。
  * 返回 array($status, $data)，与路由返回值一致。
  */
 function jc_store_upload($tmp, $name, $size, $cleanup)
 {
-    $maxBytes = (int) jc_config('UPLOAD_MAX_BYTES');
-    if ($maxBytes > 0 && $size > $maxBytes) {
-        if ($cleanup) {
-            @unlink($tmp);
-        }
-        return array(400, array('error' => '文件过大，当前部署最多支持 ' . round($maxBytes / 1048576, 1) . 'MB'));
-    }
-
     $clientExt = strtolower((string) pathinfo((string) $name, PATHINFO_EXTENSION));
     $clientExt = $clientExt !== '' ? ('.' . substr($clientExt, 0, 10)) : '';
 
@@ -282,6 +289,15 @@ function jc_store_upload($tmp, $name, $size, $cleanup)
     }
     $kind = $info['kind'];
     $isVideo = $kind === 'video';
+
+    // 视频走分片上传，不受单次请求体积限制，单独放宽到 VIDEO_MAX_BYTES（默认 100MB）。
+    $maxBytes = jc_upload_max_bytes($kind);
+    if ($maxBytes > 0 && $size > $maxBytes) {
+        if ($cleanup) {
+            @unlink($tmp);
+        }
+        return array(400, array('error' => ($isVideo ? '视频' : '文件') . '过大，当前部署最多支持 ' . round($maxBytes / 1048576, 1) . 'MB'));
+    }
 
     $sub = date('Ym');
     $dir = JC_HTDOCS . '/uploads/' . $sub;
@@ -370,6 +386,14 @@ route('POST', '#^/api/upload/chunk$#', function ($params, $body) {
     $total = isset($_SERVER['HTTP_X_CHUNK_TOTAL']) ? (int) $_SERVER['HTTP_X_CHUNK_TOTAL'] : 0;
     if ($index < 0 || $total <= 0 || $index >= $total || $total > 400) {
         return array(400, array('error' => '分片参数不合法'));
+    }
+    // 明显超限的文件在收第一片时就拒绝，避免白白占用磁盘和带宽。
+    // X-File-Kind 只是客户端提示，最终类型仍由合并后的文件内容决定。
+    $kindHint = isset($_SERVER['HTTP_X_FILE_KIND']) ? strtolower(trim((string) $_SERVER['HTTP_X_FILE_KIND'])) : '';
+    $earlyMax = jc_upload_max_bytes($kindHint === 'video' ? 'video' : 'image');
+    $expectSize = isset($_SERVER['HTTP_X_FILE_SIZE']) ? (int) $_SERVER['HTTP_X_FILE_SIZE'] : 0;
+    if ($expectSize > 0 && $earlyMax > 0 && $expectSize > $earlyMax) {
+        return array(400, array('error' => '文件过大，当前部署最多支持 ' . round($earlyMax / 1048576, 1) . 'MB'));
     }
 
     $dir = JC_HTDOCS . '/uploads/_chunks/' . $id;
@@ -934,6 +958,19 @@ route('POST', '#^/api/messages$#', function ($params, $body) {
         }
     } elseif ($msgType !== 'text' && $msgType !== 'sticker' && !$mediaUrl) {
         return array(400, array('error' => '缺少媒体文件'));
+    }
+
+    // 幂等发送：同一 clientId 只入库一条。
+    // 手机端网络抖动、用户连点、请求超时后自动重试时，很容把同一条消息提交两次；
+    // 前端已加发送锁，这里再做一层服务端兜底，命中已有消息就直接返回它。
+    if (is_string($clientId) && $clientId !== '' && preg_match('/^[A-Za-z0-9_-]{6,64}$/', $clientId)) {
+        $dupe = db_one(
+            'SELECT * FROM `messages` WHERE `conv_type` = ? AND `conv_id` = ? AND `sender_id` = ? AND `extra` LIKE ? ORDER BY `id` DESC LIMIT 1',
+            array((string) $convType, (string) $convId, $uid, '%"client_id":"' . $clientId . '"%')
+        );
+        if ($dupe && empty($dupe['recalled'])) {
+            return array(200, array('message' => build_message($dupe)));
+        }
     }
 
     // 引用回复：拼装被引用消息摘要，写入 extra.reply
