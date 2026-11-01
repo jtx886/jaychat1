@@ -92,6 +92,24 @@ public final class Ui {
                 .show();
     }
 
+    /** 失败详情弹窗（可复制），避免一闪而过的提示看不清原因 */
+    public static void error(Activity a, String title, String msg) {
+        if (a == null || a.isFinishing() || msg == null) return;
+        new AlertDialog.Builder(a)
+                .setTitle(title)
+                .setMessage(msg)
+                .setPositiveButton("复制", (d, w) -> {
+                    try {
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                                a.getSystemService(Context.CLIPBOARD_SERVICE);
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("error", msg));
+                    } catch (Exception ignored) {
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
     public interface Confirm {
         void onConfirm();
     }

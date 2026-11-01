@@ -136,7 +136,7 @@ public class AuthActivity extends AppCompatActivity {
                 Ui.runMain(() -> {
                     if (isFinishing()) return;
                     setBusy(false);
-                    Ui.toast(this, e.getMessage() == null ? "登录失败" : e.getMessage());
+                    Ui.error(this, "登录失败", errorText(e));
                 });
             }
         });
@@ -177,10 +177,17 @@ public class AuthActivity extends AppCompatActivity {
                 Ui.runMain(() -> {
                     if (isFinishing()) return;
                     setBusy(false);
-                    Ui.toast(this, e.getMessage() == null ? "注册失败" : e.getMessage());
+                    Ui.error(this, "注册失败", errorText(e));
                 });
             }
         });
+    }
+
+    private static String errorText(Exception e) {
+        String m = e.getMessage();
+        if (m == null || m.trim().isEmpty()) return e.getClass().getSimpleName();
+        if (!(e instanceof Api.ApiException)) m = m + "（" + e.getClass().getSimpleName() + "）";
+        return m;
     }
 
     private void sendCode() {

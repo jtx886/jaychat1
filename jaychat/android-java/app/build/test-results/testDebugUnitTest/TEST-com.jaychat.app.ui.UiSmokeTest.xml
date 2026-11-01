@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.jaychat.app.ui.UiSmokeTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-01T03:16:47.827Z" hostname="all-in-one-90-x2w9x" time="5.268">
+<testsuite name="com.jaychat.app.ui.UiSmokeTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-01T03:41:33.294Z" hostname="all-in-one-90-x2w9x" time="4.91">
   <properties/>
-  <testcase name="authActivity_inflates" classname="com.jaychat.app.ui.UiSmokeTest" time="1.671"/>
-  <testcase name="conversationAdapter_bindsDmAndGroup" classname="com.jaychat.app.ui.UiSmokeTest" time="0.364"/>
-  <testcase name="allActivities_inflate" classname="com.jaychat.app.ui.UiSmokeTest" time="2.392"/>
-  <testcase name="messageAdapter_bindsTextAndRecalled" classname="com.jaychat.app.ui.UiSmokeTest" time="0.205"/>
-  <testcase name="mainActivity_starts" classname="com.jaychat.app.ui.UiSmokeTest" time="0.32"/>
-  <testcase name="contactAdapter_bindsSectionGroupUser" classname="com.jaychat.app.ui.UiSmokeTest" time="0.17"/>
-  <testcase name="momentAdapter_bindsCardWithLikesAndComments" classname="com.jaychat.app.ui.UiSmokeTest" time="0.146"/>
+  <testcase name="authActivity_inflates" classname="com.jaychat.app.ui.UiSmokeTest" time="1.669"/>
+  <testcase name="conversationAdapter_bindsDmAndGroup" classname="com.jaychat.app.ui.UiSmokeTest" time="0.359"/>
+  <testcase name="allActivities_inflate" classname="com.jaychat.app.ui.UiSmokeTest" time="2.048"/>
+  <testcase name="messageAdapter_bindsTextAndRecalled" classname="com.jaychat.app.ui.UiSmokeTest" time="0.18"/>
+  <testcase name="mainActivity_starts" classname="com.jaychat.app.ui.UiSmokeTest" time="0.316"/>
+  <testcase name="contactAdapter_bindsSectionGroupUser" classname="com.jaychat.app.ui.UiSmokeTest" time="0.146"/>
+  <testcase name="momentAdapter_bindsCardWithLikesAndComments" classname="com.jaychat.app.ui.UiSmokeTest" time="0.192"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[Invalid ID 0x00000000.
 ]]></system-err>

@@ -60,7 +60,8 @@ public final class Api {
 
     public final OkHttpClient client = new OkHttpClient.Builder()
             .cookieJar(cookieJar)
-            .connectTimeout(20, TimeUnit.SECONDS)
+            .protocols(java.util.Collections.singletonList(okhttp3.Protocol.HTTP_1_1))
+            .connectTimeout(25, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
@@ -159,15 +160,54 @@ public final class Api {
         return b;
     }
 
+    /**
+     * 共享主机会对人机验证做 IP + Cookie 绑定。浏览器是先打开网页拿到 __test 再发接口，
+     * 这里在首次请求前也先访问一次站点首页，避免首个 POST 直接撞上验证页。
+     */
+    private void primeChallenge() {
+        if (Store.cookies().contains("__test=")) return;
+        try {
+            String base = Store.base();
+            HttpUrl u = HttpUrl.parse(base.endsWith("/") ? base : base + "/");
+            if (u == null) return;
+            Request req = new Request.Builder()
+                    .url(u)
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .header("Accept-Language", "zh-CN,zh;q=0.9")
+                    .header("User-Agent", UA)
+                    .get()
+                    .build();
+            Response res = client.newCall(req).execute();
+            try {
+                String type = res.body() != null && res.body().contentType() != null
+                        ? res.body().contentType().toString() : "";
+                if (type.contains("text/html") && res.body() != null) {
+                    String html = res.peekBody(400_000).string();
+                    if (html.contains("toNumbers(")) solveChallenge(html, u);
+                }
+            } finally {
+                res.close();
+            }
+            client.connectionPool().evictAll();
+        } catch (Exception ignored) {
+        }
+    }
+
     private JSONObject exec(String path, String method, JSONObject json,
                             RequestBody body, Map<String, String> headers) throws IOException {
         String base = Store.base();
         if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+        primeChallenge();
         Request.Builder builder = new Request.Builder()
                 .url(base + path)
                 .header("Accept", "application/json, text/plain, */*")
                 .header("Accept-Language", "zh-CN,zh;q=0.9")
+                .header("Referer", base + "/")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Dest", "empty")
                 .header("User-Agent", UA);
+        if (!"GET".equals(method) && !"HEAD".equals(method)) builder.header("Origin", base);
         String tk = Store.token();
         if (tk != null && !tk.isEmpty()) builder.header("Authorization", "Bearer " + tk);
         if (headers != null) {
@@ -183,10 +223,11 @@ public final class Api {
             builder.method(method, rb);
         }
 
-        // 共享主机可能在任何请求上返回人机验证页：解出 __test 后关闭旧连接、换新连接重发。
-        for (int attempt = 0; attempt < 4; attempt++) {
+        // 共享主机可能在任何请求上返回人机验证页：解出 __test 后按浏览器方式带 ?i=1 重发。
+        for (int attempt = 0; attempt < 6; attempt++) {
             Call call = client.newCall(builder.build());
             Response res = call.execute();
+            HttpUrl reqUrl = res.request().url();
             String type = res.body() != null && res.body().contentType() != null
                     ? res.body().contentType().toString() : "";
             if (type.contains("text/html")) {
@@ -196,9 +237,12 @@ public final class Api {
                 } catch (Exception e) {
                     html = "";
                 }
-                if (html.contains("toNumbers(") && solveChallenge(html, res.request().url())) {
+                if (html.contains("toNumbers(") && solveChallenge(html, reqUrl)) {
                     res.close();
                     client.connectionPool().evictAll();
+                    String s = reqUrl.toString();
+                    HttpUrl next = HttpUrl.parse(s + (s.contains("?") ? "&i=1" : "?i=1"));
+                    if (next != null) builder.url(next);
                     continue;
                 }
             }
@@ -206,11 +250,15 @@ public final class Api {
                 String text = res.body() != null ? res.body().string() : "";
                 JSONObject obj = parseBody(text);
                 if (!res.isSuccessful()) {
-                    String msg = obj != null && obj.optString("error", "").length() > 0
-                            ? obj.optString("error") : null;
-                    if (msg == null) {
-                        msg = text.startsWith("<") ? "服务器验证失败，请检查网络或服务器地址"
-                                : "请求失败（HTTP " + res.code() + "）";
+                    String msg = obj != null ? obj.optString("error", "") : "";
+                    if (msg.isEmpty()) {
+                        if (text.trim().startsWith("<")) {
+                            msg = "服务器验证失败，请检查网络或服务器地址（HTTP " + res.code() + "）";
+                        } else {
+                            String snip = text.trim().replaceAll("\\s+", " ");
+                            if (snip.length() > 60) snip = snip.substring(0, 60);
+                            msg = "请求失败（HTTP " + res.code() + "）" + (snip.isEmpty() ? "" : "：" + snip);
+                        }
                     }
                     throw new ApiException(res.code(), msg);
                 }
