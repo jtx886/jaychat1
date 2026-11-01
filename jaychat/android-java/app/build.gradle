@@ -10,8 +10,8 @@ android {
         applicationId "com.jaychat.app"
         minSdk 23
         targetSdk 35
-        versionCode 11
-        versionName "3.0.1"
+        versionCode 12
+        versionName "3.0.2"
     }
 
     signingConfigs {
@@ -40,6 +40,18 @@ android {
             excludes += ['/META-INF/{AL2.0,LGPL2.1}']
         }
     }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
+    }
+}
+
+tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+    systemProperty 'robolectric.dependency.repo.url', 'https://maven.aliyun.com/repository/public'
+    systemProperty 'robolectric.dependency.repo.id', 'aliyun'
 }
 
 dependencies {
@@ -52,4 +64,8 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation 'com.github.bumptech.glide:okhttp3-integration:4.16.0'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'androidx.test:core:1.6.1'
 }

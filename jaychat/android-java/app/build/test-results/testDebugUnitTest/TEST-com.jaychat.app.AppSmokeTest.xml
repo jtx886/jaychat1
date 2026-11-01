@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.jaychat.app.AppSmokeTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-01T03:16:41.747Z" hostname="all-in-one-90-x2w9x" time="6.063">
+  <properties/>
+  <testcase name="application_starts" classname="com.jaychat.app.AppSmokeTest" time="6.063"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -22,7 +22,8 @@ import com.jaychat.app.Ui;
 public class MeFragment extends Fragment {
 
     private AvatarView avatar;
-    private TextView tvName, tvId, tvBio, tvVersion, rowAdmin;
+    private TextView tvName, tvId, tvBio, tvVersion;
+    private View rowAdmin;
 
     @Nullable
     @Override
@@ -60,7 +61,7 @@ public class MeFragment extends Fragment {
         root.findViewById(R.id.btnLogout).setOnClickListener(v ->
                 Ui.confirm(getContext(), "退出登录", "确定退出当前账号？", this::logout));
 
-        tvVersion.setText("Jay Chat 原生版 3.0.1（Java）");
+        tvVersion.setText("Jay Chat 原生版 3.0.2（Java）");
         return root;
     }
 

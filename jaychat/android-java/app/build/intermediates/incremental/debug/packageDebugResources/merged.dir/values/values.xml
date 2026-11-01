@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ai">#34D399</color>
+    <color name="bg0">#05060D</color>
+    <color name="bg1">#0A0D1C</color>
+    <color name="bg2">#111634</color>
+    <color name="black">#000000</color>
+    <color name="border">#1CFFFFFF</color>
+    <color name="border_strong">#33FFFFFF</color>
+    <color name="brand">#6D8CFF</color>
+    <color name="brand2">#9DB6FF</color>
+    <color name="brand3">#6EE7FF</color>
+    <color name="danger">#FF5F7A</color>
+    <color name="danger_dark">#E0445F</color>
+    <color name="glass">#0DFFFFFF</color>
+    <color name="glass_strong">#16FFFFFF</color>
+    <color name="grad_end">#35C6FF</color>
+    <color name="grad_mid">#4F7BFF</color>
+    <color name="grad_start">#7A5CFF</color>
+    <color name="ok">#2FD88A</color>
+    <color name="ripple">#33FFFFFF</color>
+    <color name="text">#EEF3FF</color>
+    <color name="text2">#AEB6CC</color>
+    <color name="text3">#6E7793</color>
+    <color name="warn">#FFB84D</color>
+    <color name="white">#FFFFFF</color>
+    <string name="app_name">Jay Chat</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="loading">加载中…</string>
+    <string name="send">发送</string>
+    <string name="tab_contacts">通讯录</string>
+    <string name="tab_me">我的</string>
+    <string name="tab_messages">消息</string>
+    <string name="tab_moments">动态</string>
+    <style name="BrandButton">
+        <item name="android:background">@drawable/btn_brand</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+    <style name="Card">
+        <item name="android:background">@drawable/card_glass</item>
+        <item name="android:padding">18dp</item>
+    </style>
+    <style name="Edit">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:paddingTop">13dp</item>
+        <item name="android:paddingBottom">13dp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textColorHint">@color/text3</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:layout_marginTop">10dp</item>
+        <item name="android:minHeight">50dp</item>
+        <item name="android:singleLine">true</item>
+    </style>
+    <style name="GhostButton">
+        <item name="android:background">@drawable/btn_ghost</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_marginTop">10dp</item>
+        <item name="android:minHeight">50dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+    <style name="MenuRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+    </style>
+    <style name="MenuText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">14dp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+    <style name="Shape.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+    <style name="Sub">
+        <item name="android:textColor">@color/text2</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+    <style name="Theme.JayChat" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/brand</item>
+        <item name="colorSecondary">@color/brand3</item>
+        <item name="colorSurface">@color/bg1</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="android:colorBackground">@color/bg0</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/bg0</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text2</item>
+        <item name="android:windowBackground">@drawable/bg_main</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="materialAlertDialogTheme">@style/Theme.JayChat.Dialog</item>
+        <item name="bottomSheetDialogTheme">@style/Theme.JayChat.BottomSheet</item>
+    </style>
+    <style name="Theme.JayChat.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="colorSurface">@color/bg2</item>
+    </style>
+    <style name="Theme.JayChat.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/bg2</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text2</item>
+        <item name="shapeAppearanceOverlay">@style/Shape.Dialog</item>
+    </style>
+    <style name="Title">
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>
